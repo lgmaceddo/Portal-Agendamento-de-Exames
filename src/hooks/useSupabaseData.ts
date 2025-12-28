@@ -291,8 +291,7 @@ export const useSupabaseData = (): SupabaseDataState => {
     const { data, error } = await supabase
       .from(table)
       .insert(item)
-      .select()
-      .single();
+      .select(); // Removido .single()
 
     if (error) {
       console.error(`Error creating item in ${table}:`, error);
@@ -308,8 +307,7 @@ export const useSupabaseData = (): SupabaseDataState => {
       .from(table)
       .update(updates)
       .eq('id', id)
-      .select()
-      .single();
+      .select(); // Removido .single()
 
     if (error) {
       console.error(`Error updating item in ${table}:`, error);
