@@ -36,18 +36,18 @@ export const UserRoleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       setLoading(true);
-      // Buscando o papel na tabela 'user_roles' (fonte de verdade para RLS)
+      // Buscando o papel na tabela 'profiles' que é onde a função SQL de inicialização escreve.
       const { data, error } = await supabase
-        .from('user_roles')
+        .from('profiles')
         .select('role')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (error) {
         console.error('Erro ao buscar role:', error);
         setRole('user');
       } else {
-        // O campo 'role' na tabela user_roles é um ENUM 'app_role'
+        // O campo 'role' na tabela profiles é TEXT, mas deve ser 'admin' ou 'user'
         setRole((data?.role as AppRole) || 'user');
       }
     } catch (err) {
