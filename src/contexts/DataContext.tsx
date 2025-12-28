@@ -360,6 +360,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+  // --- Funções de Gerenciamento de Dados Locais (TUSS) ---
+  
+  const importTussCodes = useCallback((codes: TussCode[]) => {
+    setTussCodes(codes);
+    setHasUnsavedChanges(true);
+  }, []);
+
+  const clearTussCodes = useCallback(() => {
+    setTussCodes([]);
+    setHasUnsavedChanges(true);
+  }, []);
+
   // --- Mapeamento de Dados para o Frontend ---
   const viewTypes = useMemo(() => ["UNIMED", "CASSI", "PARTICULAR", "ANESTESIA", "CDU", "HOSPITAL", "EXTERNO", "GERAL", "EXAMES"], []);
 
@@ -516,7 +528,299 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       toast.error("Erro fatal ao processar o arquivo de importação.");
       return false;
     }
-  }, [refetchAll, setUserName, createItem, updateItem, deleteItem]);
+  }, [refetchAll, setUserName, createItem, updateItem, deleteItem, importTussCodes, clearTussCodes]);
+
+
+  // --- Funções CRUD (Supabase) ---
+  // ... (Todas as funções CRUD do Supabase permanecem aqui, mas não são repetidas para brevidade)
+  // ... (Apenas as funções de categoria são mantidas para referência de dependência)
+  
+  const addCategory = useCallback(async (table: 'categories' | 'info_tags' | 'recado_categories', viewType: string, category: Omit<Category, "id">) => {
+    const newCategory = await createItem(table, { ...category, view_type: viewType });
+    return newCategory;
+  }, [createItem]);
+
+  const updateCategory = useCallback(async (table: 'categories' | 'info_tags' | 'recado_categories', categoryId: string, updates: Partial<Category>) => {
+    const { view_type, ...rest } = updates;
+    await updateItem(table, categoryId, rest);
+  }, [updateItem]);
+
+  const deleteCategory = useCallback(async (table: 'categories' | 'info_tags' | 'recado_categories', categoryId: string) => {
+    await deleteItem(table, categoryId);
+  }, [deleteItem]);
+
+  const addScript = useCallback(async (viewType: string, categoryId: string, script: Omit<ScriptItem, "id" | "category_id">) => {
+    await createItem('scripts', { ...script, category_id: categoryId, view_type: viewType });
+  }, [createItem]);
+
+  const updateScript = useCallback(async (viewType: string, categoryId: string, scriptId: string, updates: Partial<ScriptItem>) => {
+    await updateItem('scripts', scriptId, { ...updates, category_id: categoryId, view_type: viewType });
+  }, [updateItem]);
+
+  const deleteScript = useCallback(async (viewType: string, categoryId: string, scriptId: string) => {
+    await deleteItem('scripts', scriptId);
+  }, [deleteItem]);
+
+  const addExam = useCallback(async (viewType: string, categoryId: string, exam: Omit<ExamItem, "id" | "category_id">) => {
+    await createItem('exams', {
+      title: exam.title,
+      location: exam.sectors,
+      extension: exam.extension,
+      additional_info: exam.additionalInfo,
+      scheduling_rules: { rules: exam.rules || '' },
+      category_id: categoryId,
+      view_type: viewType,
+    });
+  }, [createItem]);
+
+  const updateExam = useCallback(async (viewType: string, categoryId: string, examId: string, updates: Partial<ExamItem>) => {
+    await updateItem('exams', examId, {
+      title: updates.title,
+      location: updates.sectors,
+      extension: updates.extension,
+      additional_info: updates.additionalInfo,
+      scheduling_rules: { rules: updates.rules || '' },
+      category_id: categoryId,
+      view_type: viewType,
+    });
+  }, [updateItem]);
+
+  const deleteExam = useCallback(async (viewType: string, categoryId: string, examId: string) => {
+    await deleteItem('exams', examId);
+  }, [deleteItem]);
+
+  const addContact = useCallback(async (viewType: string, categoryId: string, contact: Omit<ContactItem, "id">) => {
+    await createItem('contacts', { ...contact, category_id: categoryId, view_type: viewType });
+  }, [createItem]);
+
+  const updateContact = useCallback(async (viewType: string, categoryId: string, contactId: string, updates: Partial<ContactItem>) => {
+    await updateItem('contacts', contactId, { ...updates, category_id: categoryId, view_type: viewType });
+  }, [updateItem]);
+
+  const deleteContact = useCallback(async (viewType: string, categoryId: string, contactId: string) => {
+    await deleteItem('contacts', contactId);
+  }, [deleteItem]);
+
+  const addValueTable = useCallback(async (viewType: string, categoryId: string, item: Omit<ValueTableItem, "id" | "category_id">) => {
+    await createItem('value_tables', { ...item, category_id: categoryId, view_type: viewType });
+  }, [createItem]);
+
+  const updateValueTable = useCallback(async (viewType: string, categoryId: string, itemId: string, updates: Partial<Omit<ValueTableItem, "id">>) => {
+    await updateItem('value_tables', itemId, { ...updates, category_id: categoryId, view_type: viewType });
+  }, [updateItem]);
+
+  const deleteValueTable = useCallback(async (viewType: string, categoryId: string, itemId: string) => {
+    await deleteItem('value_tables', itemId);
+  }, [deleteItem]);
+
+  const setValueTableCategoryItems = useCallback(async (viewType: string, categoryId: string, items: ValueTableItem[]) => {
+    // 1. Deleta todos os itens existentes na categoria
+    const { error: deleteError } = await supabase
+      .from('value_tables')
+      .delete()
+      .eq('category_id', categoryId);
+
+    if (deleteError) {
+      toast.error(`Erro ao limpar a tabela de valores: ${deleteError.message}`);
+      throw new Error(deleteError.message);
+    }
+
+    // 2. Insere os novos itens (usando upsert para garantir IDs)
+    const itemsToInsert = items.map(item => ({
+      ...item,
+      category_id: categoryId,
+      view_type: viewType,
+    }));
+
+    const { error: insertError } = await supabase
+      .from('value_tables')
+      .upsert(itemsToInsert, { onConflict: 'id', ignoreDuplicates: false });
+
+    if (insertError) {
+      toast.error(`Erro ao inserir novos itens na tabela de valores: ${insertError.message}`);
+      throw new Error(insertError.message);
+    }
+
+    await refetchAll();
+  }, [refetchAll]);
+
+  const addRecadoCategory = useCallback(async (category: Omit<RecadoCategory, "id">) => {
+    await createItem('recado_categories', { ...category, destination_type: category.destinationType, group_name: category.groupName, attendants: category.attendants });
+  }, [createItem]);
+
+  const updateRecadoCategory = useCallback(async (category: RecadoCategory) => {
+    await updateItem('recado_categories', category.id, { title: category.title, description: category.description, destination_type: category.destinationType, group_name: category.groupName, attendants: category.attendants });
+  }, [updateItem]);
+
+  const deleteRecadoCategory = useCallback(async (categoryId: string) => {
+    await deleteItem('recado_categories', categoryId);
+  }, [deleteItem]);
+
+  const addRecadoItem = useCallback(async (categoryId: string, item: Omit<RecadoItem, "id" | "category_id">) => {
+    await createItem('recados', { ...item, category_id: categoryId });
+  }, [createItem]);
+
+  const updateRecadoItem = useCallback(async (categoryId: string, itemId: string, updates: Partial<RecadoItem>) => {
+    await updateItem('recados', itemId, { ...updates, category_id: categoryId });
+  }, [updateItem]);
+
+  const deleteRecadoItem = useCallback(async (categoryId: string, itemId: string) => {
+    await deleteItem('recados', itemId);
+  }, [deleteItem]);
+
+  const addInfoTag = useCallback(async (tag: Omit<InfoTag, "id">) => {
+    await createItem('info_tags', tag);
+  }, [createItem]);
+
+  const updateInfoTag = useCallback(async (tag: InfoTag) => {
+    await updateItem('info_tags', tag.id, tag);
+  }, [updateItem]);
+
+  const deleteInfoTag = useCallback(async (tagId: string) => {
+    await deleteItem('info_tags', tagId);
+  }, [deleteItem]);
+
+  const addInfoItem = useCallback(async (item: Omit<InfoItem, "id" | "date" | "tagId"> & { tagId: string }) => {
+    await createItem('infos', { ...item, tag_id: item.tagId });
+  }, [createItem]);
+
+  const updateInfoItem = useCallback(async (item: InfoItem) => {
+    await updateItem('infos', item.id, { title: item.title, content: item.content, tag_id: item.tagId, attachments: item.attachments });
+  }, [updateItem]);
+
+  const deleteInfoItem = useCallback(async (itemId: string, tagId: string) => {
+    await deleteItem('infos', itemId);
+  }, [deleteItem]);
+
+  const updateHeaderTag = useCallback(async (id: string, updates: Omit<HeaderTagInfo, "id" | "tag">) => {
+    await updateItem('header_tags', id, updates);
+  }, [updateItem]);
+
+  const addNotice = useCallback(async (notice: Omit<Notice, "id">) => {
+    await createItem('notices', notice);
+  }, [createItem]);
+
+  const updateNotice = useCallback(async (notice: Notice) => {
+    await updateItem('notices', notice.id, notice);
+  }, [updateItem]);
+
+  const deleteNotice = useCallback(async (id: string) => {
+    await deleteItem('notices', id);
+  }, [deleteItem]);
+
+  const addOffice = useCallback(async (office: Omit<Office, "id">) => {
+    await createItem('offices', office);
+  }, [createItem]);
+
+  const updateOffice = useCallback(async (office: Office) => {
+    await updateItem('offices', office.id, office);
+  }, [updateItem]);
+
+  const deleteOffice = useCallback(async (id: string) => {
+    await deleteItem('offices', id);
+  }, [deleteItem]);
+
+  const addExamDeliveryAttendant = useCallback(async (attendant: Omit<ExamDeliveryAttendant, "id">) => {
+    await createItem('exam_delivery_attendants', attendant);
+  }, [createItem]);
+
+  const updateExamDeliveryAttendant = useCallback(async (attendant: ExamDeliveryAttendant) => {
+    await updateItem('exam_delivery_attendants', attendant.id, attendant);
+  }, [updateItem]);
+
+  const deleteExamDeliveryAttendant = useCallback(async (id: string) => {
+    await deleteItem('exam_delivery_attendants', id);
+  }, [deleteItem]);
+
+  const addProfessional = useCallback(async (viewType: string, categoryId: string, professional: Omit<Professional, "id">) => {
+    await createItem('professionals', professional);
+  }, [createItem]);
+
+  const updateProfessional = useCallback(async (viewType: string, categoryId: string, professionalId: string, updates: Partial<Omit<Professional, "id">>) => {
+    await updateItem('professionals', professionalId, updates);
+  }, [updateItem]);
+
+  const deleteProfessional = useCallback(async (viewType: string, categoryId: string, professionalId: string) => {
+    await deleteItem('professionals', professionalId);
+  }, [deleteItem]);
+
+  const syncExamsFromValueTable = useCallback(async () => {
+    // Lógica de sincronização (mantida como estava)
+    const valueItems = Object.values(valueTableData).flat().flat();
+    const examItems = Object.values(examData).flat().flat();
+    const examCategoriesList = Object.values(examCategories).flat();
+
+    if (valueItems.length === 0) {
+      toast.info("Nenhum item na Tabela de Valores para sincronizar.");
+      return;
+    }
+
+    // 1. Cria/garante a categoria 'VALORES' em EXAMES
+    const EXAMES_VIEW_TYPE = 'EXAMES';
+    const VALORES_CATEGORY_NAME = 'VALORES';
+    let valoresCategory = examCategoriesList.find(c => c.name === VALORES_CATEGORY_NAME);
+
+    if (!valoresCategory) {
+      const newCat = await addCategory('categories', EXAMES_VIEW_TYPE, { name: VALORES_CATEGORY_NAME, color: 'text-orange-800' });
+      valoresCategory = newCat;
+    }
+
+    if (!valoresCategory) {
+      toast.error("Falha ao criar categoria de sincronização.");
+      return;
+    }
+
+    const valoresCategoryId = valoresCategory.id;
+
+    // 2. Mapeia exames existentes por código para evitar duplicatas
+    const existingExamsMap = new Map<string, ExamItem>();
+    examItems.forEach(exam => {
+      if (exam.code) {
+        existingExamsMap.set(exam.code, exam);
+      }
+    });
+
+    const updates: { id: string, data: Partial<ExamItem> }[] = [];
+    const newExams: Omit<ExamItem, "id" | "category_id">[] = [];
+
+    valueItems.forEach(valueItem => {
+      const existingExam = existingExamsMap.get(valueItem.codigo);
+      const newExamData: Omit<ExamItem, "id" | "category_id"> = {
+        code: valueItem.codigo,
+        title: valueItem.nome,
+        mainLocation: 'CDU', // Padrão
+        sectors: ['1º Andar'], // Padrão
+        extension: '2110', // Padrão
+        additionalInfo: valueItem.info || '',
+        rules: '', // Regras não são sincronizadas da tabela de valores
+      };
+
+      if (existingExam && existingExam.category_id === valoresCategoryId) {
+        // Atualiza o exame existente
+        updates.push({
+          id: existingExam.id,
+          data: {
+            ...newExamData,
+            category_id: valoresCategoryId,
+            mainLocation: existingExam.mainLocation, // Preserva o local se já existir
+            sectors: existingExam.sectors, // Preserva os setores
+            extension: existingExam.extension, // Preserva o ramal
+          }
+        });
+      } else if (!existingExam) {
+        // Cria novo exame
+        newExams.push({ ...newExamData, category_id: valoresCategoryId });
+      }
+    });
+
+    // 3. Executa as operações de CRUD
+    const updatePromises = updates.map(u => updateExam(EXAMES_VIEW_TYPE, valoresCategoryId, u.id, u.data));
+    const createPromises = newExams.map(n => addExam(EXAMES_VIEW_TYPE, valoresCategoryId, n));
+
+    await Promise.all([...updatePromises, ...createPromises]);
+
+    toast.success(`Sincronização concluída: ${newExams.length} novos exames adicionados, ${updates.length} atualizados.`);
+  }, [valueTableData, examData, examCategories, addCategory, updateExam, addExam, toast]);
 
 
   // --- Context Value ---
@@ -581,7 +885,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     updateInfoItem, deleteInfoItem,
     syncExamsFromValueTable,
   }), [
-    supabaseLoading, supabaseError, scriptCategories, scriptData, examCategories, examData, contactCategories, contactData, valueTableCategories, valueTableData, professionalData, officeData, noticeData, headerTagData, examDeliveryAttendants, recadoCategories, recadoData, infoTags, infoData, tussCodes, userName, hasUnsavedChanges, setUserName, saveToLocalStorage, exportAllData, importAllData, importTussCodes, clearTussCodes, updateHeaderTag, addNotice, updateNotice, deleteNotice, addOffice, updateOffice, deleteOffice, addExamDeliveryAttendant, updateExamDeliveryAttendant, deleteExamDeliveryAttendant, addProfessional, updateProfessional, deleteProfessional, addScript, updateScript, deleteScript, addExam, updateExam, deleteExam, addContact, updateContact, deleteContact, addValueTable, updateValueTable, deleteValueTable, setValueTableCategoryItems, addRecadoCategory, updateRecadoCategory, deleteRecadoCategory, addRecadoItem, updateRecadoItem, deleteRecadoItem, addInfoTag, updateInfoTag, deleteInfoTag, addInfoItem, updateInfoItem, deleteInfoItem, syncExamsFromValueTable, addCategory, updateCategory, deleteCategory
+    supabaseLoading, supabaseError, scriptCategories, scriptData, examCategories, examData, contactCategories, contactData, valueTableCategories, valueTableData, professionalData, officeData, noticeData, headerTagData, examDeliveryAttendants, recadoCategories, recadoData, infoTags, infoData, tussCodes, userName, hasUnsavedChanges, setUserName, saveToLocalStorage, exportAllData, importAllData, importTussCodes, clearTussCodes, updateHeaderTag, addNotice, updateNotice, deleteNotice, addOffice, updateOffice, deleteOffice, addExamDeliveryAttendant, updateExamDeliveryAttendant, deleteExamDeliveryAttendant, addProfessional, updateProfessional, deleteProfessional, addScript, updateScript, deleteScript, addExam, updateExam, deleteExam, addContact, updateContact, deleteContact, addValueTable, updateValueTable, deleteValueTable, setValueTableCategoryItems, addRecadoCategory, updateRecadoCategory, deleteRecadoCategory, addRecadoItem, updateRecadoItem, deleteRecadoItem, addInfoTag, updateInfoTag, deleteInfoTag, addInfoItem, updateInfoItem, deleteInfoItem, syncExamsFromValueTable, addCategory, updateCategory, deleteCategory, createItem, updateItem, deleteItem, refetchAll
   ]);
 
   return (
