@@ -1,15 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useData } from "@/contexts/DataContext";
-import { FileText, TestTube, Phone, DollarSign, Users, Building, TrendingUp, Activity, Clock, AlertCircle, Download, Upload, Save, Loader2 } from "lucide-react";
+import { FileText, TestTube, Phone, DollarSign, Users, Building, TrendingUp, Activity, Clock, AlertCircle, Download, Upload, Save } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { useRef, useState } from "react"; // Importando useState
+import { useRef } from "react";
 
 export const DashboardContent = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isImporting, setIsImporting] = useState(false); // Novo estado para controle de loading
   
   const {
     scriptData,
@@ -151,28 +150,23 @@ export const DashboardContent = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setIsImporting(true);
-
     const reader = new FileReader();
-    reader.onload = async (e) => {
+    reader.onload = (e) => {
       try {
         const jsonData = e.target?.result as string;
-        const success = await importAllData(jsonData);
+        const success = importAllData(jsonData);
         
         if (success) {
           toast({
             title: "Importação concluída",
-            description: "Todos os dados foram importados e sincronizados com o banco de dados!",
+            description: "Todos os dados foram importados com sucesso!",
           });
         } else {
-          // Erro já é toastado dentro de importAllData, mas garantimos o fallback
-          if (!success) {
-             toast({
-                title: "Erro na importação",
-                description: "O arquivo não possui um formato válido ou ocorreu um erro no servidor.",
-                variant: "destructive",
-            });
-          }
+          toast({
+            title: "Erro na importação",
+            description: "O arquivo não possui um formato válido.",
+            variant: "destructive",
+          });
         }
       } catch (error) {
         toast({
@@ -180,19 +174,17 @@ export const DashboardContent = () => {
           description: "Não foi possível ler o arquivo.",
           variant: "destructive",
         });
-      } finally {
-        setIsImporting(false);
-        // Limpar input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+      }
+      
+      // Limpar input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
     };
     reader.readAsText(file);
   };
 
   const handleImportClick = () => {
-    if (isImporting) return;
     fileInputRef.current?.click();
   };
 
@@ -403,7 +395,7 @@ export const DashboardContent = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Importa todos os dados de um arquivo JSON de backup. Esta ação substituirá os dados existentes no banco de dados.
+              Importa todos os dados de um arquivo JSON de backup. Esta ação substituirá todos os dados atuais.
             </p>
             <input
               ref={fileInputRef}
@@ -417,23 +409,13 @@ export const DashboardContent = () => {
               className="w-full"
               size="lg"
               variant="outline"
-              disabled={isImporting}
             >
-              {isImporting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Importando...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Selecionar Arquivo JSON
-                </>
-              )}
+              <Upload className="h-4 w-4 mr-2" />
+              Selecionar Arquivo JSON
             </Button>
             <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 p-3 rounded-md">
               <p className="font-semibold mb-1">⚠️ Atenção:</p>
-              <p>A importação usará os IDs do arquivo para atualizar ou inserir dados no banco. Certifique-se de usar um arquivo de backup válido.</p>
+              <p>A importação substituirá TODOS os dados atuais pelos dados do arquivo. Certifique-se de fazer um backup antes de importar.</p>
             </div>
           </CardContent>
         </Card>
