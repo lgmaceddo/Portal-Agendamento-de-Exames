@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { FileText, TestTube, Phone, DollarSign, Users, Building, Settings, ChevronDown, MessageSquare, Info, UserCog } from "lucide-react";
+import { FileText, TestTube, Phone, DollarSign, Users, Building, Settings, ChevronDown, MessageCircle, Info, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRoleContext } from "@/contexts/UserRoleContext";
+import { UserProfileCard } from "./UserProfileCard";
 
 interface SidebarProps {
   onNavigate: (section: string, subCategory?: string) => void;
@@ -54,7 +55,7 @@ export const Sidebar = ({ onNavigate, currentSection, currentSubCategory }: Side
     },
     {
       name: "Recados",
-      icon: MessageSquare,
+      icon: MessageCircle,
       section: "recados",
       expandable: false,
     },
@@ -106,6 +107,10 @@ export const Sidebar = ({ onNavigate, currentSection, currentSubCategory }: Side
 
   return (
     <aside className="w-64 bg-card p-4 flex flex-col shadow-lg overflow-y-auto">
+      
+      {/* User Profile Card */}
+      <UserProfileCard /> 
+
       <nav className="flex-1">
         <ul className="space-y-2">
           {menuItems.map((item) => {
