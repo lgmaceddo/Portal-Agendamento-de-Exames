@@ -532,24 +532,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
 
   // --- Funções CRUD (Supabase) ---
+  // ... (Todas as funções CRUD do Supabase permanecem aqui, mas não são repetidas para brevidade)
+  // ... (Apenas as funções de categoria são mantidas para referência de dependência)
   
   const addCategory = useCallback(async (table: 'categories' | 'info_tags' | 'recado_categories', viewType: string, category: Omit<Category, "id">) => {
-    // Usando string literal para o nome da tabela para evitar problemas de cache de tipagem
-    const tableName = table === 'categories' ? 'categories' : table === 'info_tags' ? 'info_tags' : 'recado_categories';
-    
-    const newCategory = await createItem(tableName, { ...category, view_type: viewType });
+    const newCategory = await createItem(table, { ...category, view_type: viewType });
     return newCategory;
   }, [createItem]);
 
   const updateCategory = useCallback(async (table: 'categories' | 'info_tags' | 'recado_categories', categoryId: string, updates: Partial<Category>) => {
-    const tableName = table === 'categories' ? 'categories' : table === 'info_tags' ? 'info_tags' : 'recado_categories';
     const { view_type, ...rest } = updates;
-    await updateItem(tableName, categoryId, rest);
+    await updateItem(table, categoryId, rest);
   }, [updateItem]);
 
   const deleteCategory = useCallback(async (table: 'categories' | 'info_tags' | 'recado_categories', categoryId: string) => {
-    const tableName = table === 'categories' ? 'categories' : table === 'info_tags' ? 'info_tags' : 'recado_categories';
-    await deleteItem(tableName, categoryId);
+    await deleteItem(table, categoryId);
   }, [deleteItem]);
 
   const addScript = useCallback(async (viewType: string, categoryId: string, script: Omit<ScriptItem, "id" | "category_id">) => {
@@ -617,27 +614,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [deleteItem]);
 
   const setValueTableCategoryItems = useCallback(async (viewType: string, categoryId: string, items: ValueTableItem[]) => {
-    // 1. Tenta deletar todos os itens existentes na categoria
-    try {
-      const { error: deleteError } = await supabase
-        .from('value_tables')
-        .delete()
-        .eq('category_id', categoryId);
+    // 1. Deleta todos os itens existentes na categoria
+    const { error: deleteError } = await supabase
+      .from('value_tables')
+      .delete()
+      .eq('category_id', categoryId);
 
-      if (deleteError) {
-        // Se o erro for de cache de esquema, loga e continua para o upsert
-        if (deleteError.message.includes('Could not find the table')) {
-            console.warn(`[Supabase Cache Warning] Ignorando erro de cache de esquema na exclusão de value_tables. Confiando no upsert.`);
-        } else {
-            toast.error(`Erro ao limpar a tabela de valores: ${deleteError.message}`);
-            throw new Error(deleteError.message);
-        }
-      }
-    } catch (e) {
-        // Captura erros de rede ou outros erros não Supabase
-        console.error("[Supabase Delete Error]", e);
+    if (deleteError) {
+      toast.error(`Erro ao limpar a tabela de valores: ${deleteError.message}`);
+      throw new Error(deleteError.message);
     }
-
 
     // 2. Insere os novos itens (usando upsert para garantir IDs)
     const itemsToInsert = items.map(item => ({
@@ -886,6 +872,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     addContactCategory: (viewType: string, category: Omit<Category, "id">) => addCategory('categories', viewType, category),
     updateContactCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => updateCategory('categories', categoryId, updates),
     deleteContactCategory: (viewType: string, categoryId: string) => deleteCategory('categories', categoryId),
+    addContact, updateContact, deleteContact,
     addValueTableCategory: (viewType: string, category: Omit<Category, "id">) => addCategory('categories', viewType, category),
     updateValueTableCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => updateCategory('categories', categoryId, updates),
     deleteValueTableCategory: (viewType: string, categoryId: string) => deleteCategory('categories', categoryId),
