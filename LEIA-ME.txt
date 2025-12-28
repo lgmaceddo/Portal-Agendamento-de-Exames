@@ -1,0 +1,34 @@
+═══════════════════════════════════════════════════════
+  PORTAL CDU - UNIMED BAURU
+  Instruções para Uso Offline
+═══════════════════════════════════════════════════════
+
+RESUMO RÁPIDO:
+-------------
+
+1. Exporte o projeto para GitHub (botão no canto superior direito)
+2. No seu computador, clone o repositório
+3. Execute: npm install
+4. Execute: npm run build
+5. Copie a pasta "dist" + arquivo launcher para outras máquinas
+6. Clique no launcher para abrir o portal
+
+
+INSTRUÇÕES COMPLETAS:
+--------------------
+
+Leia o arquivo: INSTRUCOES-USO-OFFLINE.md
+
+
+REQUISITOS:
+----------
+
+✓ Python instalado (https://www.python.org/downloads/)
+✓ Durante instalação, marcar "Add Python to PATH"
+
+
+DÚVIDAS?
+-------
+
+Consulte o arquivo INSTRUCOES-USO-OFFLINE.md para 
+instruções detalhadas passo a passo.

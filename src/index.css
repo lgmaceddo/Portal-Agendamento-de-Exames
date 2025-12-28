@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 96%;
+    --foreground: 180 10% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 180 10% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 180 10% 15%;
+
+    --primary: 176 71% 22%;
+    --primary-foreground: 180 100% 98%;
+
+    --secondary: 176 20% 90%;
+    --secondary-foreground: 176 71% 15%;
+
+    --muted: 176 10% 92%;
+    --muted-foreground: 180 10% 45%;
+
+    --accent: 176 40% 85%;
+    --accent-foreground: 176 71% 15%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 180 10% 90%;
+    --input: 180 10% 90%;
+    --ring: 176 71% 22%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 180 10% 30%;
+    --sidebar-primary: 176 71% 22%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 176 20% 96%;
+    --sidebar-accent-foreground: 176 71% 22%;
+    --sidebar-border: 180 10% 92%;
+    --sidebar-ring: 176 71% 22%;
+  }
+
+  .dark {
+    --background: 176 40% 6%;
+    --foreground: 180 100% 98%;
+
+    --card: 176 30% 10%;
+    --card-foreground: 180 100% 98%;
+
+    --popover: 176 30% 10%;
+    --popover-foreground: 180 100% 98%;
+
+    --primary: 176 71% 35%;
+    --primary-foreground: 176 20% 10%;
+
+    --secondary: 176 30% 18%;
+    --secondary-foreground: 180 100% 98%;
+
+    --muted: 176 30% 18%;
+    --muted-foreground: 180 10% 70%;
+
+    --accent: 176 40% 22%;
+    --accent-foreground: 180 100% 98%;
+
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 176 30% 18%;
+    --input: 176 30% 18%;
+    --ring: 176 71% 35%;
+    
+    --sidebar-background: 176 30% 10%;
+    --sidebar-foreground: 180 100% 98%;
+    --sidebar-primary: 176 71% 35%;
+    --sidebar-primary-foreground: 176 20% 10%;
+    --sidebar-accent: 176 30% 18%;
+    --sidebar-accent-foreground: 180 100% 98%;
+    --sidebar-border: 176 30% 18%;
+    --sidebar-ring: 176 71% 35%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Utility for line-clamp */
+.line-clamp-3 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* NEW: Utility for line-clamp-2 */
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Card title color enforced via design system */
+@layer components {
+  .card-header h3 { @apply text-primary; }
+  .ui-card h3 { @apply text-primary; }
+}
