@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useData } from "@/contexts/DataContext";
-import { FileText, TestTube, Phone, DollarSign, Users, Building, TrendingUp, Activity, Clock, AlertCircle, Download, Upload, Save } from "lucide-react";
+import { FileText, TestTube, Phone, DollarSign, Users, Building, TrendingUp, Activity, Clock, AlertCircle, Download, Upload, Save, Loader2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useRef, useState } from "react"; // Importando useState
