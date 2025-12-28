@@ -617,16 +617,27 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [deleteItem]);
 
   const setValueTableCategoryItems = useCallback(async (viewType: string, categoryId: string, items: ValueTableItem[]) => {
-    // 1. Deleta todos os itens existentes na categoria
-    const { error: deleteError } = await supabase
-      .from('value_tables')
-      .delete()
-      .eq('category_id', categoryId);
+    // 1. Tenta deletar todos os itens existentes na categoria
+    try {
+      const { error: deleteError } = await supabase
+        .from('value_tables')
+        .delete()
+        .eq('category_id', categoryId);
 
-    if (deleteError) {
-      toast.error(`Erro ao limpar a tabela de valores: ${deleteError.message}`);
-      throw new Error(deleteError.message);
+      if (deleteError) {
+        // Se o erro for de cache de esquema, loga e continua para o upsert
+        if (deleteError.message.includes('Could not find the table')) {
+            console.warn(`[Supabase Cache Warning] Ignorando erro de cache de esquema na exclusão de value_tables. Confiando no upsert.`);
+        } else {
+            toast.error(`Erro ao limpar a tabela de valores: ${deleteError.message}`);
+            throw new Error(deleteError.message);
+        }
+      }
+    } catch (e) {
+        // Captura erros de rede ou outros erros não Supabase
+        console.error("[Supabase Delete Error]", e);
     }
+
 
     // 2. Insere os novos itens (usando upsert para garantir IDs)
     const itemsToInsert = items.map(item => ({
