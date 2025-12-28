@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useMemo, useCallback } from "react";
 import {
   Category,
   ScriptItem,
@@ -16,27 +16,162 @@ import {
   TussCode,
 } from "@/types/data";
 import { Notice } from "@/types/notice";
-import {
-  scriptCategories as initialScriptCategories,
-  scriptData as initialScriptData,
-  examCategories as initialExamCategories,
-  examData as initialExamData,
-  contactCategories as initialContactCategories,
-  contactData as initialContactData,
-  valueTableCategories as initialValueTableCategories,
-  valueTableData as initialValueTableData,
-  professionalData as initialProfessionalData,
-  officeData as initialOfficeData,
-  noticeData as initialNoticeData,
-  headerTagData as initialHeaderTagData,
-  examDeliveryAttendants as initialExamDeliveryAttendants,
-  recadoCategories as initialRecadoCategories,
-  recadoData as initialRecadoData,
-  infoTags as initialInfoTags,
-  infoData as initialInfoData,
-} from "@/data/initialData";
+import { useSupabaseData } from "@/hooks/useSupabaseData";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+import { Database } from "@/integrations/supabase/types";
+
+// Mapeamento de tipos de tabela do Supabase
+type DbCategory = Database['public']['Tables']['categories']['Row'];
+type DbScript = Database['public']['Tables']['scripts']['Row'];
+type DbExam = Database['public']['Tables']['exams']['Row'];
+type DbContact = Database['public']['Tables']['contacts']['Row'];
+type DbValueTable = Database['public']['Tables']['value_tables']['Row'];
+type DbProfessional = Database['public']['Tables']['professionals']['Row'];
+type DbOffice = Database['public']['Tables']['offices']['Row'];
+type DbNotice = Database['public']['Tables']['notices']['Row'];
+type DbHeaderTag = Database['public']['Tables']['header_tags']['Row'];
+type DbExamDeliveryAttendant = Database['public']['Tables']['exam_delivery_attendants']['Row'];
+type DbRecadoCategory = Database['public']['Tables']['recado_categories']['Row'];
+type DbRecado = Database['public']['Tables']['recados']['Row'];
+type DbInfoTag = Database['public']['Tables']['info_tags']['Row'];
+type DbInfo = Database['public']['Tables']['infos']['Row'];
+
+// --- Mapeamento de Dados do Banco para o Frontend ---
+
+const mapDbCategoryToFE = (dbCat: DbCategory): Category => ({
+  id: dbCat.id,
+  name: dbCat.name,
+  color: dbCat.color,
+  view_type: dbCat.view_type,
+});
+
+const mapDbScriptToFE = (dbScript: DbScript): ScriptItem => ({
+  id: dbScript.id,
+  title: dbScript.title,
+  content: dbScript.content,
+  order: dbScript.order || undefined,
+  category_id: dbScript.category_id,
+});
+
+const mapDbExamToFE = (dbExam: DbExam): ExamItem => ({
+  id: dbExam.id,
+  code: dbExam.category_id, // Código não mapeado diretamente, usando category_id como fallback
+  title: dbExam.title,
+  mainLocation: dbExam.location[0] as 'CDU' | 'HOSPITAL' | 'EXTERNO',
+  sectors: dbExam.location,
+  extension: dbExam.extension,
+  additionalInfo: dbExam.additional_info || '',
+  rules: (dbExam.scheduling_rules as any)?.rules || '',
+  category_id: dbExam.category_id,
+});
+
+const mapDbContactToFE = (dbContact: DbContact): ContactItem => ({
+  id: dbContact.id,
+  setor: dbContact.setor,
+  local: dbContact.local || '',
+  ramal: dbContact.ramal || '',
+  telefone: dbContact.telefone || '',
+  whatsapp: dbContact.whatsapp || '',
+});
+
+const mapDbValueTableToFE = (dbValue: DbValueTable): ValueTableItem => ({
+  id: dbValue.id,
+  codigo: dbValue.codigo || '',
+  nome: dbValue.nome,
+  info: dbValue.info || '',
+  honorario: dbValue.honorario || 0,
+  exame_cartao: dbValue.exame_cartao || 0,
+  material_min: dbValue.material_min || 0,
+  material_max: dbValue.material_max || 0,
+  honorarios_diferenciados: (dbValue.honorarios_diferenciados as any) || [],
+  category_id: dbValue.category_id,
+});
+
+const mapDbProfessionalToFE = (dbProf: DbProfessional): Professional => ({
+  id: dbProf.id,
+  name: dbProf.name,
+  gender: dbProf.gender as 'masculino' | 'feminino',
+  specialty: dbProf.specialty,
+  ageRange: dbProf.age_range || '',
+  fittings: (dbProf.fittings as any) || { allowed: false, max: 0, details: '' },
+  generalObs: dbProf.general_obs || '',
+  performedExams: (dbProf.performed_exams as any) || [],
+});
+
+const mapDbOfficeToFE = (dbOffice: DbOffice): Office => ({
+  id: dbOffice.id,
+  name: dbOffice.name,
+  ramal: dbOffice.ramal,
+  schedule: dbOffice.schedule,
+  specialties: dbOffice.specialties || [],
+  attendants: (dbOffice.attendants as any) || [],
+  professionals: (dbOffice.professionals as any) || [],
+  procedures: dbOffice.procedures || [],
+});
+
+const mapDbNoticeToFE = (dbNotice: DbNotice): Notice => ({
+  id: dbNotice.id,
+  title: dbNotice.title,
+  content: dbNotice.content,
+  date: dbNotice.date,
+  tag: dbNotice.tag as any,
+});
+
+const mapDbHeaderTagToFE = (dbTag: DbHeaderTag): HeaderTagInfo => ({
+  id: dbTag.id,
+  tag: dbTag.tag,
+  title: dbTag.title,
+  address: dbTag.address || '',
+  phones: (dbTag.phones as any) || [],
+  whatsapp: dbTag.whatsapp || '',
+  contacts: (dbTag.contacts as any) || [],
+});
+
+const mapDbExamDeliveryAttendantToFE = (dbAttendant: DbExamDeliveryAttendant): ExamDeliveryAttendant => ({
+  id: dbAttendant.id,
+  name: dbAttendant.name,
+  chatNick: dbAttendant.chat_nick,
+});
+
+const mapDbRecadoCategoryToFE = (dbCat: DbRecadoCategory): RecadoCategory => ({
+  id: dbCat.id,
+  title: dbCat.title,
+  description: dbCat.description,
+  destinationType: dbCat.destination_type as 'attendant' | 'group',
+  groupName: dbCat.group_name || '',
+  attendants: (dbCat.attendants as any) || [],
+});
+
+const mapDbRecadoItemToFE = (dbRecado: DbRecado): RecadoItem => ({
+  id: dbRecado.id,
+  title: dbRecado.title,
+  content: dbRecado.content || '',
+  fields: (dbRecado.fields as any) || [],
+  category_id: dbRecado.category_id,
+});
+
+const mapDbInfoTagToFE = (dbTag: DbInfoTag): InfoTag => ({
+  id: dbTag.id,
+  name: dbTag.name,
+  color: dbTag.color,
+});
+
+const mapDbInfoItemToFE = (dbInfo: DbInfo): InfoItem => ({
+  id: dbInfo.id,
+  title: dbInfo.title,
+  content: dbInfo.content || '',
+  tagId: dbInfo.tag_id,
+  date: dbInfo.date || new Date(dbInfo.created_at).toLocaleDateString("pt-BR"),
+  attachments: (dbInfo.attachments as any) || [],
+});
+
+
+// --- Tipos de Contexto ---
 
 interface DataContextType {
+  loading: boolean;
+  error: string | null;
   scriptCategories: Record<string, Category[]>;
   scriptData: Record<string, Record<string, ScriptItem[]>>;
   examCategories: Record<string, Category[]>;
@@ -52,228 +187,279 @@ interface DataContextType {
   examDeliveryAttendants: ExamDeliveryAttendant[];
   recadoCategories: RecadoCategory[];
   recadoData: Record<string, RecadoItem[]>;
-  infoTags: InfoTag[]; // NOVO
-  infoData: Record<string, InfoItem[]>; // NOVO
-  tussCodes: TussCode[]; // Códigos TUSS
+  infoTags: InfoTag[];
+  infoData: Record<string, InfoItem[]>;
+  tussCodes: TussCode[];
   userName: string;
-  hasUnsavedChanges: boolean;
+  hasUnsavedChanges: boolean; // Mantido para localStorage (TUSS, UserName)
 
   // User functions
   setUserName: (name: string) => void;
 
-  // Save/Load functions
+  // Save/Load functions (Apenas para dados locais)
   saveToLocalStorage: () => void;
-
-  // Import/Export functions
   exportAllData: () => string;
   importAllData: (jsonData: string) => boolean;
 
-  // Header tag functions
-  updateHeaderTag: (id: string, updates: Omit<HeaderTagInfo, "id" | "tag">) => void;
-
-  // Notice functions
-  addNotice: (notice: Omit<Notice, "id">) => void;
-  updateNotice: (notice: Notice) => void;
-  deleteNotice: (id: string) => void;
-
-  // Office functions
-  addOffice: (office: Omit<Office, "id">) => void;
-  updateOffice: (office: Office) => void;
-  deleteOffice: (id: string) => void;
-
-  // Exam delivery attendant functions
-  addExamDeliveryAttendant: (attendant: Omit<ExamDeliveryAttendant, "id">) => void;
-  updateExamDeliveryAttendant: (attendant: ExamDeliveryAttendant) => void;
-  deleteExamDeliveryAttendant: (id: string) => void;
-
-  // Professional functions
-  addProfessional: (viewType: string, categoryId: string, professional: Omit<Professional, "id">) => void;
-  updateProfessional: (viewType: string, categoryId: string, professionalId: string, updates: Partial<Omit<Professional, "id">>) => void;
-  deleteProfessional: (viewType: string, categoryId: string, professionalId: string) => void;
-
-  // Script functions
-  addScriptCategory: (viewType: string, category: Category) => void;
-  updateScriptCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => void;
-  deleteScriptCategory: (viewType: string, categoryId: string) => void;
-  addScript: (viewType: string, categoryId: string, script: ScriptItem) => void;
-  updateScript: (viewType: string, categoryId: string, scriptId: string, updates: Partial<ScriptItem>) => void;
-  deleteScript: (viewType: string, categoryId: string, scriptId: string) => void;
-
-  // Exam functions
-  addExamCategory: (viewType: string, category: Category) => void;
-  updateExamCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => void;
-  deleteExamCategory: (viewType: string, categoryId: string) => void;
-  addExam: (viewType: string, categoryId: string, exam: ExamItem) => void;
-  updateExam: (viewType: string, categoryId: string, examId: string, updates: Partial<ExamItem>) => void;
-  deleteExam: (viewType: string, categoryId: string, examId: string) => void;
-
-  // Contact functions
-  addContactCategory: (viewType: string, category: Category) => void;
-  updateContactCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => void;
-  deleteContactCategory: (viewType: string, categoryId: string) => void;
-  addContact: (viewType: string, categoryId: string, contact: ContactItem) => void;
-  updateContact: (viewType: string, categoryId: string, contactId: string, updates: Partial<ContactItem>) => void;
-  deleteContact: (viewType: string, categoryId: string, contactId: string) => void;
-
-  // Value table functions
-  addValueTableCategory: (viewType: string, category: Category) => void;
-  updateValueTableCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => void;
-  deleteValueTableCategory: (viewType: string, categoryId: string) => void;
-  addValueTable: (viewType: string, categoryId: string, item: Omit<ValueTableItem, "id">) => void;
-  updateValueTable: (viewType: string, categoryId: string, itemId: string, updates: Partial<Omit<ValueTableItem, "id">>) => void;
-  deleteValueTable: (viewType: string, categoryId: string, itemId: string) => void;
-  setValueTableCategoryItems: (viewType: string, categoryId: string, items: ValueTableItem[]) => void;
-
-  // Recado functions
-  addRecadoCategory: (category: Omit<RecadoCategory, "id">) => void;
-  updateRecadoCategory: (category: RecadoCategory) => void;
-  deleteRecadoCategory: (categoryId: string) => void;
-  addRecadoItem: (categoryId: string, item: Omit<RecadoItem, "id">) => void;
-  updateRecadoItem: (categoryId: string, itemId: string, updates: Partial<RecadoItem>) => void;
-  deleteRecadoItem: (categoryId: string, itemId: string) => void;
-
-  // Info functions (NOVO)
-  addInfoTag: (tag: Omit<InfoTag, "id">) => void;
-  updateInfoTag: (tag: InfoTag) => void;
-  deleteInfoTag: (tagId: string) => void;
-  addInfoItem: (item: Omit<InfoItem, "id" | "date">) => void;
-  updateInfoItem: (item: InfoItem) => void;
-  deleteInfoItem: (itemId: string, tagId: string) => void;
-  syncExamsFromValueTable: () => void;
-
-  // TUSS Codes functions
+  // CRUD Functions (Supabase)
+  updateHeaderTag: (id: string, updates: Omit<HeaderTagInfo, "id" | "tag">) => Promise<void>;
+  addNotice: (notice: Omit<Notice, "id">) => Promise<void>;
+  updateNotice: (notice: Notice) => Promise<void>;
+  deleteNotice: (id: string) => Promise<void>;
+  addOffice: (office: Omit<Office, "id">) => Promise<void>;
+  updateOffice: (office: Office) => Promise<void>;
+  deleteOffice: (id: string) => Promise<void>;
+  addExamDeliveryAttendant: (attendant: Omit<ExamDeliveryAttendant, "id">) => Promise<void>;
+  updateExamDeliveryAttendant: (attendant: ExamDeliveryAttendant) => Promise<void>;
+  deleteExamDeliveryAttendant: (id: string) => Promise<void>;
+  addProfessional: (viewType: string, categoryId: string, professional: Omit<Professional, "id">) => Promise<void>;
+  updateProfessional: (viewType: string, categoryId: string, professionalId: string, updates: Partial<Omit<Professional, "id">>) => Promise<void>;
+  deleteProfessional: (viewType: string, categoryId: string, professionalId: string) => Promise<void>;
+  addScriptCategory: (viewType: string, category: Omit<Category, "id">) => Promise<void>;
+  updateScriptCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => Promise<void>;
+  deleteScriptCategory: (viewType: string, categoryId: string) => Promise<void>;
+  addScript: (viewType: string, categoryId: string, script: Omit<ScriptItem, "id" | "category_id">) => Promise<void>;
+  updateScript: (viewType: string, categoryId: string, scriptId: string, updates: Partial<ScriptItem>) => Promise<void>;
+  deleteScript: (viewType: string, categoryId: string, scriptId: string) => Promise<void>;
+  addExamCategory: (viewType: string, category: Omit<Category, "id">) => Promise<void>;
+  updateExamCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => Promise<void>;
+  deleteExamCategory: (viewType: string, categoryId: string) => Promise<void>;
+  addExam: (viewType: string, categoryId: string, exam: Omit<ExamItem, "id" | "category_id">) => Promise<void>;
+  updateExam: (viewType: string, categoryId: string, examId: string, updates: Partial<ExamItem>) => Promise<void>;
+  deleteExam: (viewType: string, categoryId: string, examId: string) => Promise<void>;
+  addContactCategory: (viewType: string, category: Omit<Category, "id">) => Promise<void>;
+  updateContactCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => Promise<void>;
+  deleteContactCategory: (viewType: string, categoryId: string) => Promise<void>;
+  addContact: (viewType: string, categoryId: string, contact: Omit<ContactItem, "id">) => Promise<void>;
+  updateContact: (viewType: string, categoryId: string, contactId: string, updates: Partial<ContactItem>) => Promise<void>;
+  deleteContact: (viewType: string, categoryId: string, contactId: string) => Promise<void>;
+  addValueTableCategory: (viewType: string, category: Omit<Category, "id">) => Promise<void>;
+  updateValueTableCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => Promise<void>;
+  deleteValueTableCategory: (viewType: string, categoryId: string) => Promise<void>;
+  addValueTable: (viewType: string, categoryId: string, item: Omit<ValueTableItem, "id" | "category_id">) => Promise<void>;
+  updateValueTable: (viewType: string, categoryId: string, itemId: string, updates: Partial<Omit<ValueTableItem, "id">>) => Promise<void>;
+  deleteValueTable: (viewType: string, categoryId: string, itemId: string) => Promise<void>;
+  setValueTableCategoryItems: (viewType: string, categoryId: string, items: ValueTableItem[]) => Promise<void>;
+  addRecadoCategory: (category: Omit<RecadoCategory, "id">) => Promise<void>;
+  updateRecadoCategory: (category: RecadoCategory) => Promise<void>;
+  deleteRecadoCategory: (categoryId: string) => Promise<void>;
+  addRecadoItem: (categoryId: string, item: Omit<RecadoItem, "id" | "category_id">) => Promise<void>;
+  updateRecadoItem: (categoryId: string, itemId: string, updates: Partial<RecadoItem>) => Promise<void>;
+  deleteRecadoItem: (categoryId: string, itemId: string) => Promise<void>;
+  addInfoTag: (tag: Omit<InfoTag, "id">) => Promise<void>;
+  updateInfoTag: (tag: InfoTag) => Promise<void>;
+  deleteInfoTag: (tagId: string) => Promise<void>;
+  addInfoItem: (item: Omit<InfoItem, "id" | "date" | "tagId"> & { tagId: string }) => Promise<void>;
+  updateInfoItem: (item: InfoItem) => Promise<void>;
+  deleteInfoItem: (itemId: string, tagId: string) => Promise<void>;
+  syncExamsFromValueTable: () => Promise<void>;
   importTussCodes: (codes: TussCode[]) => void;
   clearTussCodes: () => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-const sortContacts = (contacts: ContactItem[]): ContactItem[] => {
-  return contacts.sort((a, b) => a.setor.localeCompare(b.setor, 'pt-BR'));
+// --- Funções de Mapeamento de Estrutura (Agrupamento) ---
+
+const groupItemsByViewAndCategory = <T extends { category_id: string }>(
+  items: T[],
+  categories: DbCategory[],
+  viewTypes: string[]
+): Record<string, Record<string, T[]>> => {
+  const grouped: Record<string, Record<string, T[]>> = {};
+  const categoryMap = new Map(categories.map(c => [c.id, c.view_type]));
+
+  viewTypes.forEach(view => {
+    grouped[view] = {};
+  });
+
+  items.forEach(item => {
+    const view = categoryMap.get(item.category_id) || 'UNKNOWN';
+    if (viewTypes.includes(view)) {
+      if (!grouped[view][item.category_id]) {
+        grouped[view][item.category_id] = [];
+      }
+      grouped[view][item.category_id].push(item);
+    }
+  });
+
+  return grouped;
 };
 
-export const DataProvider = ({ children }: { children: ReactNode }) => {
-  // Carregar dados do localStorage ou usar iniciais
-  const loadFromLocalStorage = () => {
-    try {
-      const saved = localStorage.getItem('portalData');
-      if (saved) {
-        let data = JSON.parse(saved);
+const groupCategoriesByView = (categories: DbCategory[], viewTypes: string[]): Record<string, Category[]> => {
+  const grouped: Record<string, Category[]> = {};
+  viewTypes.forEach(view => {
+    grouped[view] = categories
+      .filter(c => c.view_type === view)
+      .map(mapDbCategoryToFE)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
+  return grouped;
+};
 
-        // Migração de dados de exames (location -> sectors e adição de mainLocation)
-        if (data.examData) {
-          const migratedExamData = { ...data.examData };
-          Object.keys(migratedExamData).forEach(viewType => {
-            const categories = migratedExamData[viewType];
-            Object.keys(categories).forEach(catId => {
-              categories[catId] = categories[catId].map((exam: any) => ({
-                ...exam,
-                mainLocation: exam.mainLocation || viewType || 'CDU',
-                sectors: exam.sectors || exam.location || [],
-              }));
-            });
-          });
-          data.examData = migratedExamData;
-        }
-
-        return data;
-      }
-    } catch (error) {
-      console.error("Erro ao carregar dados:", error);
+const groupRecadoItemsByCategory = (items: DbRecado[]): Record<string, RecadoItem[]> => {
+  const grouped: Record<string, RecadoItem[]> = {};
+  items.forEach(item => {
+    if (!grouped[item.category_id]) {
+      grouped[item.category_id] = [];
     }
-    return null;
-  };
+    grouped[item.category_id].push(mapDbRecadoItemToFE(item));
+  });
+  return grouped;
+};
 
-  const savedData = loadFromLocalStorage();
+const groupInfoItemsByTag = (items: DbInfo[]): Record<string, InfoItem[]> => {
+  const grouped: Record<string, InfoItem[]> = {};
+  items.forEach(item => {
+    if (!grouped[item.tag_id]) {
+      grouped[item.tag_id] = [];
+    }
+    grouped[item.tag_id].push(mapDbInfoItemToFE(item));
+  });
+  return grouped;
+};
 
-  const [scriptCategories, setScriptCategories] = useState(savedData?.scriptCategories || initialScriptCategories);
-  const [scriptData, setScriptData] = useState(savedData?.scriptData || initialScriptData);
-  const [examCategories, setExamCategories] = useState(savedData?.examCategories || initialExamCategories);
-  const [examData, setExamData] = useState(savedData?.examData || initialExamData);
-  const [contactCategories, setContactCategories] = useState(savedData?.contactCategories || initialContactCategories);
-  const [contactData, setContactData] = useState(savedData?.contactData || initialContactData);
-  const [valueTableCategories, setValueTableCategories] = useState(savedData?.valueTableCategories || initialValueTableCategories);
-  const [valueTableData, setValueTableData] = useState(savedData?.valueTableData || initialValueTableData);
-  const [professionalData, setProfessionalData] = useState(savedData?.professionalData || initialProfessionalData);
-  const [officeData, setOfficeData] = useState<Office[]>(savedData?.officeData || initialOfficeData);
-  const [noticeData, setNoticeData] = useState<Notice[]>(savedData?.noticeData || initialNoticeData);
-  const [headerTagData, setHeaderTagData] = useState<HeaderTagInfo[]>(savedData?.headerTagData || initialHeaderTagData);
-  const [examDeliveryAttendants, setExamDeliveryAttendants] = useState<ExamDeliveryAttendant[]>(savedData?.examDeliveryAttendants || initialExamDeliveryAttendants);
-  const [recadoCategories, setRecadoCategories] = useState<RecadoCategory[]>(savedData?.recadoCategories || initialRecadoCategories);
-  const [recadoData, setRecadoData] = useState<Record<string, RecadoItem[]>>(savedData?.recadoData || initialRecadoData);
+// --- DataProvider Component ---
 
-  // NOVOS ESTADOS
-  const [infoTags, setInfoTags] = useState<InfoTag[]>(savedData?.infoTags || initialInfoTags);
-  const [infoData, setInfoData] = useState<Record<string, InfoItem[]>>(savedData?.infoData || initialInfoData);
-  const [tussCodes, setTussCodes] = useState<TussCode[]>(savedData?.tussCodes || []);
+export const DataProvider = ({ children }: { children: ReactNode }) => {
+  const {
+    loading: supabaseLoading,
+    error: supabaseError,
+    categories: dbCategories,
+    scripts: dbScripts,
+    exams: dbExams,
+    contacts: dbContacts,
+    valueTables: dbValueTables,
+    professionals: dbProfessionals,
+    offices: dbOffices,
+    notices: dbNotices,
+    headerTags: dbHeaderTags,
+    examDeliveryAttendants: dbExamDeliveryAttendants,
+    recadoCategories: dbRecadoCategories,
+    recadoItems: dbRecadoItems,
+    infoTags: dbInfoTags,
+    infoItems: dbInfoItems,
+    createItem,
+    updateItem,
+    deleteItem,
+    refetchAll,
+  } = useSupabaseData();
 
+  // --- Local State (TUSS, UserName, Unsaved Changes) ---
+  const [tussCodes, setTussCodes] = useState<TussCode[]>(() => {
+    try {
+      const saved = localStorage.getItem('portalTussCodes');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [userName, setUserNameState] = useState<string>(() => {
     const saved = localStorage.getItem('portalUserName');
     return saved || '';
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // --- Info Functions (NOVO) ---
-  const addInfoTag = (tag: Omit<InfoTag, "id">) => {
-    const newTag: InfoTag = {
-      ...tag,
-      id: `info-tag-${Date.now()}`,
+  // --- Mapeamento de Dados para o Frontend ---
+  const viewTypes = useMemo(() => ["UNIMED", "CASSI", "PARTICULAR", "ANESTESIA", "CDU", "HOSPITAL", "EXTERNO", "GERAL", "EXAMES"], []);
+
+  const scriptCategories = useMemo(() => groupCategoriesByView(dbCategories, viewTypes), [dbCategories, viewTypes]);
+  const scriptData = useMemo(() => groupItemsByViewAndCategory(dbScripts.map(mapDbScriptToFE), dbCategories, viewTypes), [dbScripts, dbCategories, viewTypes]);
+
+  const examCategories = useMemo(() => groupCategoriesByView(dbCategories, viewTypes), [dbCategories, viewTypes]);
+  const examData = useMemo(() => groupItemsByViewAndCategory(dbExams.map(mapDbExamToFE), dbCategories, viewTypes), [dbExams, dbCategories, viewTypes]);
+
+  const contactCategories = useMemo(() => groupCategoriesByView(dbCategories, ["GERAL"]), [dbCategories]);
+  const contactData = useMemo(() => groupItemsByViewAndCategory(dbContacts.map(mapDbContactToFE), dbCategories, ["GERAL"]), [dbContacts, dbCategories]);
+
+  const valueTableCategories = useMemo(() => groupCategoriesByView(dbCategories, ["GERAL"]), [dbCategories]);
+  const valueTableData = useMemo(() => groupItemsByViewAndCategory(dbValueTables.map(mapDbValueTableToFE), dbCategories, ["GERAL"]), [dbValueTables, dbCategories]);
+
+  const professionalData = useMemo(() => {
+    const mapped = dbProfessionals.map(mapDbProfessionalToFE);
+    return { GERAL: { 'prof-cat-1': mapped } }; // Mantendo a estrutura aninhada por compatibilidade
+  }, [dbProfessionals]);
+
+  const officeData = useMemo(() => dbOffices.map(mapDbOfficeToFE).sort((a, b) => a.name.localeCompare(b.name)), [dbOffices]);
+  const noticeData = useMemo(() => dbNotices.map(mapDbNoticeToFE).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [dbNotices]);
+  const headerTagData = useMemo(() => dbHeaderTags.map(mapDbHeaderTagToFE), [dbHeaderTags]);
+  const examDeliveryAttendants = useMemo(() => dbExamDeliveryAttendants.map(mapDbExamDeliveryAttendantToFE).sort((a, b) => a.name.localeCompare(b.name)), [dbExamDeliveryAttendants]);
+  const recadoCategories = useMemo(() => dbRecadoCategories.map(mapDbRecadoCategoryToFE).sort((a, b) => a.title.localeCompare(b.title)), [dbRecadoCategories]);
+  const recadoData = useMemo(() => groupRecadoItemsByCategory(dbRecadoItems), [dbRecadoItems]);
+  const infoTags = useMemo(() => dbInfoTags.map(mapDbInfoTagToFE).sort((a, b) => a.name.localeCompare(b.name)), [dbInfoTags]);
+  const infoData = useMemo(() => groupInfoItemsByTag(dbInfoItems), [dbInfoItems]);
+
+  // --- Funções de Sincronização e LocalStorage ---
+
+  const setUserName = (name: string) => {
+    setUserNameState(name);
+    localStorage.setItem('portalUserName', name);
+  };
+
+  const saveToLocalStorage = () => {
+    // Apenas salva dados locais (TUSS, UserName)
+    localStorage.setItem('portalTussCodes', JSON.stringify(tussCodes));
+    localStorage.setItem('portalUserName', userName);
+    setHasUnsavedChanges(false);
+    toast.success("Dados locais (TUSS, Nome) salvos com sucesso!");
+  };
+
+  const exportAllData = (): string => {
+    // Exporta dados do Supabase (que estão em memória) + dados locais
+    const allData = {
+      scriptCategories: scriptCategories,
+      scriptData: scriptData,
+      examCategories: examCategories,
+      examData: examData,
+      contactCategories: contactCategories,
+      contactData: contactData,
+      valueTableCategories: valueTableCategories,
+      valueTableData: valueTableData,
+      professionalData: professionalData,
+      officeData: officeData,
+      noticeData: noticeData,
+      headerTagData: headerTagData,
+      examDeliveryAttendants: examDeliveryAttendants,
+      recadoCategories: recadoCategories,
+      recadoData: recadoData,
+      infoTags: infoTags,
+      infoData: infoData,
+      tussCodes: tussCodes, // Inclui TUSS codes
+      userName: userName, // Inclui nome de usuário
+      exportDate: new Date().toISOString(),
+      version: "2.0"
     };
-    setInfoTags(prev => [...prev, newTag].sort((a, b) => a.name.localeCompare(b.name)));
-    setInfoData(prev => ({
-      ...prev,
-      [newTag.id]: [],
-    }));
-    setHasUnsavedChanges(true);
+    return JSON.stringify(allData, null, 2);
   };
 
-  const updateInfoTag = (tag: InfoTag) => {
-    setInfoTags(prev => prev.map(t => t.id === tag.id ? tag : t).sort((a, b) => a.name.localeCompare(b.name)));
-    setHasUnsavedChanges(true);
+  const importAllData = (jsonData: string): boolean => {
+    try {
+      const data = JSON.parse(jsonData);
+
+      if (!data || typeof data !== 'object') return false;
+
+      // Importação de dados Supabase (requer lógica de INSERT/UPDATE)
+      // Por simplicidade e para evitar conflitos de ID, esta função será limitada a dados locais.
+      // A importação de dados Supabase deve ser feita via API ou console.
+
+      if (data.tussCodes) setTussCodes(data.tussCodes);
+      if (data.userName) setUserName(data.userName);
+      
+      // Força o salvamento dos dados locais importados
+      localStorage.setItem('portalTussCodes', JSON.stringify(data.tussCodes || []));
+      localStorage.setItem('portalUserName', data.userName || '');
+      
+      toast.warning("A importação de dados Supabase (Scripts, Exames, etc.) deve ser feita manualmente. Apenas dados locais (TUSS, Nome) foram importados.");
+
+      // Força o refetch para garantir que o estado do Supabase seja o mais recente
+      refetchAll();
+      return true;
+    } catch (error) {
+      console.error("Erro ao importar dados:", error);
+      return false;
+    }
   };
 
-  const deleteInfoTag = (tagId: string) => {
-    setInfoTags(prev => prev.filter(t => t.id !== tagId));
-    setInfoData(prev => {
-      const { [tagId]: deleted, ...rest } = prev;
-      return rest;
-    });
-    setHasUnsavedChanges(true);
-  };
-
-  const addInfoItem = (item: Omit<InfoItem, "id" | "date">) => {
-    const newItem: InfoItem = {
-      ...item,
-      id: `info-item-${Date.now()}`,
-      date: new Date().toLocaleDateString("pt-BR"),
-    };
-    setInfoData(prev => ({
-      ...prev,
-      [item.tagId]: [...(prev[item.tagId] || []), newItem].sort((a, b) => a.title.localeCompare(b.title)),
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateInfoItem = (item: InfoItem) => {
-    setInfoData(prev => ({
-      ...prev,
-      [item.tagId]: (prev[item.tagId] || []).map(i =>
-        i.id === item.id ? { ...item, date: new Date().toLocaleDateString("pt-BR") } : i
-      ).sort((a, b) => a.title.localeCompare(b.title)),
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteInfoItem = (itemId: string, tagId: string) => {
-    setInfoData(prev => ({
-      ...prev,
-      [tagId]: (prev[tagId] || []).filter(item => item.id !== itemId),
-    }));
-    setHasUnsavedChanges(true);
-  };
-  // --- Fim Info Functions ---
-
-  // --- TUSS Codes Functions ---
   const importTussCodes = (codes: TussCode[]) => {
     setTussCodes(codes);
     setHasUnsavedChanges(true);
@@ -283,837 +469,465 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setTussCodes([]);
     setHasUnsavedChanges(true);
   };
-  // --- Fim TUSS Codes Functions ---
 
-  // --- Recado Functions ---
-  const addRecadoCategory = (category: Omit<RecadoCategory, "id">) => {
-    const newCategory: RecadoCategory = {
-      ...category,
-      id: `rec-cat-${Date.now()}`,
-    };
-    setRecadoCategories(prev => [...prev, newCategory]);
-    setRecadoData(prev => ({
-      ...prev,
-      [newCategory.id]: [],
-    }));
-    setHasUnsavedChanges(true);
-  };
+  // --- Funções CRUD (Mapeamento para Supabase) ---
 
-  const updateRecadoCategory = (category: RecadoCategory) => {
-    setRecadoCategories(prev => prev.map(c => c.id === category.id ? category : c));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteRecadoCategory = (categoryId: string) => {
-    setRecadoCategories(prev => prev.filter(c => c.id !== categoryId));
-    setRecadoData(prev => {
-      const { [categoryId]: deleted, ...rest } = prev;
-      return rest;
-    });
-    setHasUnsavedChanges(true);
-  };
-
-  const addRecadoItem = (categoryId: string, item: Omit<RecadoItem, "id">) => {
-    const newItem: RecadoItem = {
-      ...item,
-      id: `rec-item-${Date.now()}`,
-    };
-    setRecadoData(prev => ({
-      ...prev,
-      [categoryId]: [...(prev[categoryId] || []), newItem],
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateRecadoItem = (categoryId: string, itemId: string, updates: Partial<RecadoItem>) => {
-    setRecadoData(prev => ({
-      ...prev,
-      [categoryId]: (prev[categoryId] || []).map(item =>
-        item.id === itemId ? { ...item, ...updates } : item
-      ),
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteRecadoItem = (categoryId: string, itemId: string) => {
-    setRecadoData(prev => ({
-      ...prev,
-      [categoryId]: (prev[categoryId] || []).filter(item => item.id !== itemId),
-    }));
-    setHasUnsavedChanges(true);
-  };
-  // --- Fim Recado Functions ---
-
-  // Notice functions
-  const addNotice = (notice: Omit<Notice, "id">) => {
-    const newNotice: Notice = {
-      ...notice,
-      id: `notice-${Date.now()}`,
-    };
-    setNoticeData(prev => [newNotice, ...prev]);
-    setHasUnsavedChanges(true);
-  };
-
-  const updateNotice = (notice: Notice) => {
-    setNoticeData(prev =>
-      prev.map(n => n.id === notice.id ? notice : n)
-    );
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteNotice = (id: string) => {
-    setNoticeData(prev => prev.filter(n => n.id !== id));
-    setHasUnsavedChanges(true);
-  };
-
-  // Office functions
-  const addOffice = (office: Omit<Office, "id">) => {
-    const newOffice: Office = {
-      ...office,
-      id: `office-${Date.now()}`,
-    };
-    setOfficeData(prev => [...prev, newOffice].sort((a, b) => a.name.localeCompare(b.name)));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateOffice = (office: Office) => {
-    setOfficeData(prev =>
-      prev.map(o => o.id === office.id ? office : o).sort((a, b) => a.name.localeCompare(b.name))
-    );
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteOffice = (id: string) => {
-    setOfficeData(prev => prev.filter(o => o.id !== id));
-    setHasUnsavedChanges(true);
-  };
-
-  // Exam delivery attendant functions
-  const addExamDeliveryAttendant = (attendant: Omit<ExamDeliveryAttendant, "id">) => {
-    const newAttendant: ExamDeliveryAttendant = {
-      ...attendant,
-      id: `eda-${Date.now()}`,
-    };
-    setExamDeliveryAttendants(prev => [...prev, newAttendant].sort((a, b) => a.name.localeCompare(b.name)));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateExamDeliveryAttendant = (attendant: ExamDeliveryAttendant) => {
-    setExamDeliveryAttendants(prev =>
-      prev.map(a => a.id === attendant.id ? attendant : a).sort((a, b) => a.name.localeCompare(b.name))
-    );
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteExamDeliveryAttendant = (id: string) => {
-    setExamDeliveryAttendants(prev => prev.filter(a => a.id !== id));
-    setHasUnsavedChanges(true);
-  };
-
-  // Script category functions
-  const addScriptCategory = (viewType: string, category: Category) => {
-    setScriptCategories(prev => ({
-      ...prev,
-      [viewType]: [...(prev[viewType] || []), category],
-    }));
-    setScriptData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [category.id]: [],
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateScriptCategory = (viewType: string, categoryId: string, updates: Partial<Category>) => {
-    setScriptCategories(prev => ({
-      ...prev,
-      [viewType]: (prev[viewType] || []).map(cat =>
-        cat.id === categoryId ? { ...cat, ...updates } : cat
-      ),
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteScriptCategory = (viewType: string, categoryId: string) => {
-    setScriptCategories(prev => ({
-      ...prev,
-      [viewType]: (prev[viewType] || []).filter(cat => cat.id !== categoryId),
-    }));
-    setScriptData(prev => {
-      const newData = { ...prev };
-      if (newData[viewType]) {
-        const { [categoryId]: deleted, ...rest } = newData[viewType];
-        newData[viewType] = rest;
-      }
-      return newData;
-    });
-    setHasUnsavedChanges(true);
-  };
-
-  // Script functions
-  const addScript = (viewType: string, categoryId: string, script: ScriptItem) => {
-    setScriptData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: [...(prev[viewType]?.[categoryId] || []), script],
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateScript = (viewType: string, categoryId: string, scriptId: string, updates: Partial<ScriptItem>) => {
-    setScriptData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: (prev[viewType]?.[categoryId] || []).map(script =>
-          script.id === scriptId ? { ...script, ...updates } : script
-        ),
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteScript = (viewType: string, categoryId: string, scriptId: string) => {
-    setScriptData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: (prev[viewType]?.[categoryId] || []).filter(script => script.id !== scriptId),
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  // Exam category functions
-  const addExamCategory = (viewType: string, category: Category) => {
-    setExamCategories(prev => ({
-      ...prev,
-      [viewType]: [...(prev[viewType] || []), category],
-    }));
-    setExamData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [category.id]: [],
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateExamCategory = (viewType: string, categoryId: string, updates: Partial<Category>) => {
-    setExamCategories(prev => ({
-      ...prev,
-      [viewType]: (prev[viewType] || []).map(cat =>
-        cat.id === categoryId ? { ...cat, ...updates } : cat
-      ),
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteExamCategory = (viewType: string, categoryId: string) => {
-    setExamCategories(prev => ({
-      ...prev,
-      [viewType]: (prev[viewType] || []).filter(cat => cat.id !== categoryId),
-    }));
-    setExamData(prev => {
-      const newData = { ...prev };
-      if (newData[viewType]) {
-        const { [categoryId]: deleted, ...rest } = newData[viewType];
-        newData[viewType] = rest;
-      }
-      return newData;
-    });
-    setHasUnsavedChanges(true);
-  };
-
-  // Exam functions
-  const addExam = (viewType: string, categoryId: string, exam: ExamItem) => {
-    setExamData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: [...(prev[viewType]?.[categoryId] || []), exam],
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateExam = (viewType: string, categoryId: string, examId: string, updates: Partial<ExamItem>) => {
-    setExamData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: (prev[viewType]?.[categoryId] || []).map(exam =>
-          exam.id === examId ? { ...exam, ...updates } : exam
-        ),
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteExam = (viewType: string, categoryId: string, examId: string) => {
-    setExamData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: (prev[viewType]?.[categoryId] || []).filter(exam => exam.id !== examId),
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  // Contact category functions (Simplificadas para a nova estrutura)
-  const addContactCategory = (viewType: string, category: Category) => {
-    // Não permite adicionar novas categorias se o viewType for GERAL
-    if (viewType === 'GERAL') return;
-    setContactCategories(prev => ({
-      ...prev,
-      [viewType]: [...(prev[viewType] || []), category],
-    }));
-    setContactData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [category.id]: [],
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateContactCategory = (viewType: string, categoryId: string, updates: Partial<Category>) => {
-    // Permite apenas a atualização da categoria GERAL
-    if (viewType !== 'GERAL') {
-      setContactCategories(prev => ({
-        ...prev,
-        [viewType]: (prev[viewType] || []).map(cat =>
-          cat.id === categoryId ? { ...cat, ...updates } : cat
-        ),
-      }));
-      setHasUnsavedChanges(true);
+  // Helper para mapear FE para DB (apenas campos necessários para INSERT/UPDATE)
+  const mapFEToDb = (table: keyof Database['public']['Tables'], feData: any) => {
+    switch (table) {
+      case 'categories':
+        return { name: feData.name, color: feData.color, view_type: feData.viewType };
+      case 'scripts':
+        return { title: feData.title, content: feData.content, order: feData.order, category_id: feData.categoryId };
+      case 'exams':
+        return { 
+          title: feData.title, 
+          location: feData.sectors, 
+          extension: feData.extension, 
+          additional_info: feData.additionalInfo, 
+          scheduling_rules: { rules: feData.rules },
+          category_id: feData.categoryId,
+          view_type: feData.mainLocation, // Usando mainLocation como view_type
+        };
+      case 'contacts':
+        return { setor: feData.setor, local: feData.local, ramal: feData.ramal, telefone: feData.telefone, whatsapp: feData.whatsapp };
+      case 'value_tables':
+        return { 
+          codigo: feData.codigo, 
+          nome: feData.nome, 
+          info: feData.info, 
+          honorario: feData.honorario, 
+          exame_cartao: feData.exame_cartao, 
+          material_min: feData.material_min, 
+          material_max: feData.material_max, 
+          honorarios_diferenciados: feData.honorarios_diferenciados,
+          category_id: feData.categoryId,
+        };
+      case 'professionals':
+        return { 
+          name: feData.name, 
+          gender: feData.gender, 
+          specialty: feData.specialty, 
+          age_range: feData.ageRange, 
+          fittings: feData.fittings, 
+          general_obs: feData.generalObs, 
+          performed_exams: feData.performedExams 
+        };
+      case 'offices':
+        return { 
+          name: feData.name, 
+          ramal: feData.ramal, 
+          schedule: feData.schedule, 
+          specialties: feData.specialties, 
+          attendants: feData.attendants, 
+          professionals: feData.professionals, 
+          procedures: feData.procedures 
+        };
+      case 'notices':
+        return { title: feData.title, content: feData.content, date: feData.date, tag: feData.tag };
+      case 'header_tags':
+        return { title: feData.title, address: feData.address, phones: feData.phones, whatsapp: feData.whatsapp, contacts: feData.contacts };
+      case 'exam_delivery_attendants':
+        return { name: feData.name, chat_nick: feData.chatNick };
+      case 'recado_categories':
+        return { title: feData.title, description: feData.description, destination_type: feData.destinationType, group_name: feData.groupName, attendants: feData.attendants };
+      case 'recados':
+        return { title: feData.title, content: feData.content, fields: feData.fields, category_id: feData.categoryId };
+      case 'info_tags':
+        return { name: feData.name, color: feData.color };
+      case 'infos':
+        return { title: feData.title, content: feData.content, tag_id: feData.tagId, date: feData.date, attachments: feData.attachments };
+      default:
+        return feData;
     }
   };
 
-  const deleteContactCategory = (viewType: string, categoryId: string) => {
-    // Não permite exclusão da categoria GERAL
-    if (viewType === 'GERAL') return;
-    setContactCategories(prev => ({
-      ...prev,
-      [viewType]: (prev[viewType] || []).filter(cat => cat.id !== categoryId),
-    }));
-    setContactData(prev => {
-      const newData = { ...prev };
-      if (newData[viewType]) {
-        const { [categoryId]: deleted, ...rest } = newData[viewType];
-        newData[viewType] = rest;
-      }
-      return newData;
-    });
-    setHasUnsavedChanges(true);
-  };
+  // --- CATEGORIES (Scripts, Exams, Values) ---
+  const addCategory = useCallback(async (table: keyof Database['public']['Tables'], viewType: string, category: Omit<Category, "id">) => {
+    await createItem(table, { ...mapFEToDb(table, { ...category, viewType }), view_type: viewType });
+  }, [createItem]);
 
-  // Contact functions
-  const addContact = (viewType: string, categoryId: string, contact: ContactItem) => {
-    setContactData(prev => {
-      const updatedItems = [...(prev[viewType]?.[categoryId] || []), contact];
-      return {
-        ...prev,
-        [viewType]: {
-          ...(prev[viewType] || {}),
-          [categoryId]: sortContacts(updatedItems),
-        },
-      };
-    });
-    setHasUnsavedChanges(true);
-  };
+  const updateCategory = useCallback(async (table: keyof Database['public']['Tables'], categoryId: string, updates: Partial<Category>) => {
+    await updateItem(table, categoryId, mapFEToDb(table, updates));
+  }, [updateItem]);
 
-  const updateContact = (viewType: string, categoryId: string, contactId: string, updates: Partial<ContactItem>) => {
-    setContactData(prev => {
-      const updatedItems = (prev[viewType]?.[categoryId] || []).map(contact =>
-        contact.id === contactId ? { ...contact, ...updates } : contact
-      );
-      return {
-        ...prev,
-        [viewType]: {
-          ...(prev[viewType] || {}),
-          [categoryId]: sortContacts(updatedItems),
-        },
-      };
-    });
-    setHasUnsavedChanges(true);
-  };
+  const deleteCategory = useCallback(async (table: keyof Database['public']['Tables'], categoryId: string) => {
+    await deleteItem(table, categoryId);
+  }, [deleteItem]);
 
-  const deleteContact = (viewType: string, categoryId: string, contactId: string) => {
-    setContactData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: (prev[viewType]?.[categoryId] || []).filter(contact => contact.id !== contactId),
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
+  // --- SCRIPTS ---
+  const addScript = useCallback(async (viewType: string, categoryId: string, script: Omit<ScriptItem, "id" | "category_id">) => {
+    await createItem('scripts', mapFEToDb('scripts', { ...script, categoryId }));
+  }, [createItem]);
 
-  // Value table category functions
-  const addValueTableCategory = (viewType: string, category: Category) => {
-    setValueTableCategories(prev => ({
-      ...prev,
-      [viewType]: [...(prev[viewType] || []), category],
-    }));
-    setValueTableData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [category.id]: [],
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
+  const updateScript = useCallback(async (viewType: string, categoryId: string, scriptId: string, updates: Partial<ScriptItem>) => {
+    await updateItem('scripts', scriptId, mapFEToDb('scripts', updates));
+  }, [updateItem]);
 
-  const updateValueTableCategory = (viewType: string, categoryId: string, updates: Partial<Category>) => {
-    setValueTableCategories(prev => ({
-      ...prev,
-      [viewType]: (prev[viewType] || []).map(cat =>
-        cat.id === categoryId ? { ...cat, ...updates } : cat
-      ),
-    }));
-    setHasUnsavedChanges(true);
-  };
+  const deleteScript = useCallback(async (viewType: string, categoryId: string, scriptId: string) => {
+    await deleteItem('scripts', scriptId);
+  }, [deleteItem]);
 
-  const deleteValueTableCategory = (viewType: string, categoryId: string) => {
-    setValueTableCategories(prev => ({
-      ...prev,
-      [viewType]: (prev[viewType] || []).filter(cat => cat.id !== categoryId),
-    }));
-    setValueTableData(prev => {
-      const newData = { ...prev };
-      if (newData[viewType]) {
-        const { [categoryId]: deleted, ...rest } = newData[viewType];
-        newData[viewType] = rest;
-      }
-      return newData;
-    });
-    setHasUnsavedChanges(true);
-  };
-
-  // Value table functions
-  const addValueTable = (viewType: string, categoryId: string, item: Omit<ValueTableItem, "id">) => {
-    const newItem: ValueTableItem = {
-      ...item,
-      id: `vt-${Date.now()}`,
+  // --- EXAMS ---
+  const addExam = useCallback(async (viewType: string, categoryId: string, exam: Omit<ExamItem, "id" | "category_id">) => {
+    const dbData = {
+      title: exam.title,
+      location: exam.sectors,
+      extension: exam.extension,
+      additional_info: exam.additionalInfo,
+      scheduling_rules: { rules: exam.rules || '' },
+      category_id: categoryId,
+      view_type: viewType,
     };
-    setValueTableData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: [...(prev[viewType]?.[categoryId] || []), newItem],
-      },
+    await createItem('exams', dbData);
+  }, [createItem]);
+
+  const updateExam = useCallback(async (viewType: string, categoryId: string, examId: string, updates: Partial<ExamItem>) => {
+    const dbUpdates = {
+      title: updates.title,
+      location: updates.sectors,
+      extension: updates.extension,
+      additional_info: updates.additionalInfo,
+      scheduling_rules: updates.rules ? { rules: updates.rules } : undefined,
+      category_id: categoryId,
+      view_type: viewType,
+    };
+    await updateItem('exams', examId, dbUpdates);
+  }, [updateItem]);
+
+  const deleteExam = useCallback(async (viewType: string, categoryId: string, examId: string) => {
+    await deleteItem('exams', examId);
+  }, [deleteItem]);
+
+  // --- CONTACTS ---
+  const addContact = useCallback(async (viewType: string, categoryId: string, contact: Omit<ContactItem, "id">) => {
+    await createItem('contacts', mapFEToDb('contacts', contact));
+  }, [createItem]);
+
+  const updateContact = useCallback(async (viewType: string, categoryId: string, contactId: string, updates: Partial<ContactItem>) => {
+    await updateItem('contacts', contactId, mapFEToDb('contacts', updates));
+  }, [updateItem]);
+
+  const deleteContact = useCallback(async (viewType: string, categoryId: string, contactId: string) => {
+    await deleteItem('contacts', contactId);
+  }, [deleteItem]);
+
+  // --- VALUE TABLES ---
+  const addValueTable = useCallback(async (viewType: string, categoryId: string, item: Omit<ValueTableItem, "id" | "category_id">) => {
+    await createItem('value_tables', mapFEToDb('value_tables', { ...item, categoryId }));
+  }, [createItem]);
+
+  const updateValueTable = useCallback(async (viewType: string, categoryId: string, itemId: string, updates: Partial<Omit<ValueTableItem, "id">>) => {
+    await updateItem('value_tables', itemId, mapFEToDb('value_tables', updates));
+  }, [updateItem]);
+
+  const deleteValueTable = useCallback(async (viewType: string, categoryId: string, itemId: string) => {
+    await deleteItem('value_tables', itemId);
+  }, [deleteItem]);
+
+  const setValueTableCategoryItems = useCallback(async (viewType: string, categoryId: string, items: ValueTableItem[]) => {
+    // Esta é uma operação complexa de substituição total.
+    // 1. Excluir todos os itens existentes na categoria.
+    // 2. Inserir todos os novos itens.
+    // 3. Sincronizar exames.
+
+    const existingIds = dbValueTables.filter(vt => vt.category_id === categoryId).map(vt => vt.id);
+    
+    // 1. Excluir (usando RPC ou loop, mas Supabase não suporta DELETE WHERE IN nativamente na API JS sem RLS complexo)
+    // Vamos usar um loop simples para garantir que o RLS funcione para cada exclusão.
+    for (const id of existingIds) {
+        await deleteItem('value_tables', id);
+    }
+
+    // 2. Inserir novos itens
+    const insertData = items.map(item => ({
+      ...mapFEToDb('value_tables', { ...item, categoryId }),
+      id: item.id, // Mantém o ID gerado no merge para estabilidade
+      category_id: categoryId,
     }));
-    setHasUnsavedChanges(true);
-  };
 
-  const updateValueTable = (viewType: string, categoryId: string, itemId: string, updates: Partial<Omit<ValueTableItem, "id">>) => {
-    setValueTableData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: (prev[viewType]?.[categoryId] || []).map(item =>
-          item.id === itemId ? { ...item, ...updates } : item
-        ),
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteValueTable = (viewType: string, categoryId: string, itemId: string) => {
-    setValueTableData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: (prev[viewType]?.[categoryId] || []).filter(item => item.id !== itemId),
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const syncExamsFromValueTable = () => {
-    syncExamsFromValueTableWithItems();
-  };
-
-
-  // Função para substituição TOTAL de uma categoria na Tabela de Valores
-  const setValueTableCategoryItems = (viewType: string, categoryId: string, items: ValueTableItem[]) => {
-    console.log(`[DataContext] Iniciando substituição TOTAL de ${items.length} itens.`);
-
-    // Usamos o setter funcional para garantir que nada se perca por concorrência
-    setValueTableData(currentValueData => {
-      // Cria o novo estado limpando o anterior para esta categoria específica
-      const updatedValueTableData = {
-        ...currentValueData,
-        [viewType]: {
-          ...(currentValueData[viewType] || {}),
-          [categoryId]: items, // Substituição direta (exclui os antigos desta categoria)
-        },
-      };
-
-      // Realiza a sincronização de exames baseada no novo estado da tabela de valores
-      // calculateSyncExams é uma função pura que calcula o próximo estado de exames
-      const syncResult = calculateSyncExams(items, examCategories, examData);
-
-      if (syncResult) {
-        setExamCategories(syncResult.nextExamCategories);
-        setExamData(syncResult.nextExamData);
+    if (insertData.length > 0) {
+      const { error } = await supabase.from('value_tables').insert(insertData);
+      if (error) {
+        toast.error(`Erro ao inserir novos itens: ${error.message}`);
+        throw new Error(error.message);
       }
+    }
+    
+    // 3. Refetch e Sincronização
+    await refetchAll();
+    await syncExamsFromValueTable();
 
-      setHasUnsavedChanges(true);
+  }, [dbValueTables, deleteItem, refetchAll]);
 
-      // Salva de forma atômica no localStorage
-      const allNewData = {
-        scriptCategories, scriptData,
-        contactCategories, contactData,
-        valueTableCategories,
-        valueTableData: updatedValueTableData,
-        examCategories: syncResult?.nextExamCategories || examCategories,
-        examData: syncResult?.nextExamData || examData,
-        professionalData, officeData, noticeData, headerTagData,
-        examDeliveryAttendants, recadoCategories, recadoData,
-        infoTags, infoData,
-        savedAt: new Date().toISOString(),
-      };
+  // --- PROFESSIONALS ---
+  const addProfessional = useCallback(async (viewType: string, categoryId: string, professional: Omit<Professional, "id">) => {
+    await createItem('professionals', mapFEToDb('professionals', professional));
+  }, [createItem]);
 
-      localStorage.setItem('portalData', JSON.stringify(allNewData));
-      console.log('[DataContext] Dados antigos excluídos e novos salvos com sucesso.');
+  const updateProfessional = useCallback(async (viewType: string, categoryId: string, professionalId: string, updates: Partial<Omit<Professional, "id">>) => {
+    await updateItem('professionals', professionalId, mapFEToDb('professionals', updates));
+  }, [updateItem]);
 
-      return updatedValueTableData;
+  const deleteProfessional = useCallback(async (viewType: string, categoryId: string, professionalId: string) => {
+    await deleteItem('professionals', professionalId);
+  }, [deleteItem]);
+
+  // --- OFFICES ---
+  const addOffice = useCallback(async (office: Omit<Office, "id">) => {
+    await createItem('offices', mapFEToDb('offices', office));
+  }, [createItem]);
+
+  const updateOffice = useCallback(async (office: Office) => {
+    await updateItem('offices', office.id, mapFEToDb('offices', office));
+  }, [updateItem]);
+
+  const deleteOffice = useCallback(async (id: string) => {
+    await deleteItem('offices', id);
+  }, [deleteItem]);
+
+  // --- NOTICES ---
+  const addNotice = useCallback(async (notice: Omit<Notice, "id">) => {
+    await createItem('notices', mapFEToDb('notices', notice));
+  }, [createItem]);
+
+  const updateNotice = useCallback(async (notice: Notice) => {
+    await updateItem('notices', notice.id, mapFEToDb('notices', notice));
+  }, [updateItem]);
+
+  const deleteNotice = useCallback(async (id: string) => {
+    await deleteItem('notices', id);
+  }, [deleteItem]);
+
+  // --- HEADER TAGS ---
+  const updateHeaderTag = useCallback(async (id: string, updates: Omit<HeaderTagInfo, "id" | "tag">) => {
+    await updateItem('header_tags', id, mapFEToDb('header_tags', updates));
+  }, [updateItem]);
+
+  // --- EXAM DELIVERY ATTENDANTS ---
+  const addExamDeliveryAttendant = useCallback(async (attendant: Omit<ExamDeliveryAttendant, "id">) => {
+    await createItem('exam_delivery_attendants', mapFEToDb('exam_delivery_attendants', attendant));
+  }, [createItem]);
+
+  const updateExamDeliveryAttendant = useCallback(async (attendant: ExamDeliveryAttendant) => {
+    await updateItem('exam_delivery_attendants', attendant.id, mapFEToDb('exam_delivery_attendants', attendant));
+  }, [updateItem]);
+
+  const deleteExamDeliveryAttendant = useCallback(async (id: string) => {
+    await deleteItem('exam_delivery_attendants', id);
+  }, [deleteItem]);
+
+  // --- RECADOS ---
+  const addRecadoCategory = useCallback(async (category: Omit<RecadoCategory, "id">) => {
+    await createItem('recado_categories', mapFEToDb('recado_categories', category));
+  }, [createItem]);
+
+  const updateRecadoCategory = useCallback(async (category: RecadoCategory) => {
+    await updateItem('recado_categories', category.id, mapFEToDb('recado_categories', category));
+  }, [updateItem]);
+
+  const deleteRecadoCategory = useCallback(async (categoryId: string) => {
+    await deleteItem('recado_categories', categoryId);
+  }, [deleteItem]);
+
+  const addRecadoItem = useCallback(async (categoryId: string, item: Omit<RecadoItem, "id" | "category_id">) => {
+    await createItem('recados', mapFEToDb('recados', { ...item, categoryId }));
+  }, [createItem]);
+
+  const updateRecadoItem = useCallback(async (categoryId: string, itemId: string, updates: Partial<RecadoItem>) => {
+    await updateItem('recados', itemId, mapFEToDb('recados', updates));
+  }, [updateItem]);
+
+  const deleteRecadoItem = useCallback(async (categoryId: string, itemId: string) => {
+    await deleteItem('recados', itemId);
+  }, [deleteItem]);
+
+  // --- INFO ---
+  const addInfoTag = useCallback(async (tag: Omit<InfoTag, "id">) => {
+    await createItem('info_tags', mapFEToDb('info_tags', tag));
+  }, [createItem]);
+
+  const updateInfoTag = useCallback(async (tag: InfoTag) => {
+    await updateItem('info_tags', tag.id, mapFEToDb('info_tags', tag));
+  }, [updateItem]);
+
+  const deleteInfoTag = useCallback(async (tagId: string) => {
+    await deleteItem('info_tags', tagId);
+  }, [deleteItem]);
+
+  const addInfoItem = useCallback(async (item: Omit<InfoItem, "id" | "date" | "tagId"> & { tagId: string }) => {
+    await createItem('infos', mapFEToDb('infos', { ...item, date: new Date().toLocaleDateString("pt-BR") }));
+  }, [createItem]);
+
+  const updateInfoItem = useCallback(async (item: InfoItem) => {
+    await updateItem('infos', item.id, mapFEToDb('infos', { ...item, date: new Date().toLocaleDateString("pt-BR") }));
+  }, [updateItem]);
+
+  const deleteInfoItem = useCallback(async (itemId: string, tagId: string) => {
+    await deleteItem('infos', itemId);
+  }, [deleteItem]);
+
+  // --- Sincronização de Exames ---
+  const syncExamsFromValueTable = useCallback(async () => {
+    // 1. Obter todos os itens da tabela de valores
+    const valueTableItems = dbValueTables.map(mapDbValueTableToFE);
+
+    if (valueTableItems.length === 0) {
+      toast.info("Nenhum item na Tabela de Valores para sincronizar.");
+      return;
+    }
+
+    // 2. Obter todos os exames atuais
+    const currentExams = dbExams.map(mapDbExamToFE);
+    const examsBySyncId = new Map<string, ExamItem>();
+
+    currentExams.forEach(exam => {
+      if (exam.id.startsWith('e-sync-')) {
+        examsBySyncId.set(exam.id, exam);
+      }
     });
-  };
 
-  // Versão pura da sincronização que recebe estados e retorna novos estados
-  const calculateSyncExams = (
-    valueTableItems: ValueTableItem[],
-    currentExamCategories: Record<string, Category[]>,
-    currentExamData: Record<string, ExamItem[]>
-  ) => {
-    if (valueTableItems.length === 0) return null;
-
-    // Criar mapas para facilitar a busca
-    const examsByTitle = new Map<string, { view: string, catId: string, item: ExamItem }>();
-    const examsBySyncId = new Map<string, { view: string, catId: string, item: ExamItem }>();
-
-    ["CDU", "HOSPITAL", "EXTERNO"].forEach(view => {
-      const viewExamsData = (currentExamData[view] || {}) as Record<string, ExamItem[]>;
-      Object.entries(viewExamsData).forEach(([catId, exams]) => {
-        exams.forEach(exam => {
-          const normalizedTitle = exam.title.toUpperCase().trim();
-          examsByTitle.set(normalizedTitle, { view, catId, item: exam });
-
-          if (exam.id.startsWith('e-sync-')) {
-            examsBySyncId.set(exam.id, { view, catId, item: exam });
-          }
-        });
-      });
-    });
-
-    // Mapeamos os exames atuais que vieram da Tabela de Valores para decidir o que manter
-    const finalGeralExams: ExamItem[] = [];
-    const VIEW_TYPE = "CDU";
     const CAT_ID = "ex-cat-geral";
+    const VIEW_TYPE = "EXAMES"; // Usando a view EXAMES para sincronização
+
+    // 3. Processar e preparar operações
+    const itemsToInsert: any[] = [];
+    const itemsToUpdate: { id: string, updates: any }[] = [];
+    const existingSyncIds = new Set<string>();
 
     valueTableItems.forEach(vtItem => {
-      const normalizedVtTitle = vtItem.nome.toUpperCase().trim();
       const syncId = `e-sync-${vtItem.id}`;
+      existingSyncIds.add(syncId);
+      const existing = examsBySyncId.get(syncId);
 
-      const existing = examsBySyncId.get(syncId) || examsByTitle.get(normalizedVtTitle);
+      const newExamData = {
+        title: vtItem.nome,
+        extension: '', // Não temos ramal na tabela de valores
+        additional_info: vtItem.info || '',
+        location: ['CDU'], // Padrão CDU
+        scheduling_rules: { rules: '' },
+        category_id: CAT_ID,
+        view_type: VIEW_TYPE,
+      };
 
       if (existing) {
-        // Atualiza ou mantém o existente
-        finalGeralExams.push({
-          ...existing.item,
-          id: syncId, // Garante que usa o ID baseado no VT
-          title: vtItem.nome,
-          code: vtItem.codigo,
-          additionalInfo: vtItem.info || existing.item.additionalInfo
-        });
+        // Atualizar se houver mudanças significativas
+        const hasChanges = existing.title !== vtItem.nome || existing.additionalInfo !== vtItem.info;
+        if (hasChanges) {
+          itemsToUpdate.push({ id: existing.id, updates: newExamData });
+        }
       } else {
-        // Cria um novo
-        finalGeralExams.push({
-          id: syncId,
-          code: vtItem.codigo,
-          title: vtItem.nome,
-          mainLocation: 'CDU',
-          sectors: [],
-          extension: '',
-          additionalInfo: vtItem.info || '',
-        });
+        // Inserir novo
+        itemsToInsert.push({ ...newExamData, id: syncId });
       }
     });
 
-    // Se a lista final estiver vazia e não houve mudanças em outros lugares, poderíamos retornar null,
-    // mas aqui queremos GARANTIR que a categoria GERAL seja atualizada (ou limpa).
+    // 4. Identificar e deletar exames sincronizados que não existem mais na tabela de valores
+    const idsToDelete = currentExams
+      .filter(exam => exam.id.startsWith('e-sync-') && !existingSyncIds.has(exam.id))
+      .map(exam => exam.id);
 
-    let nextExamCategories = { ...currentExamCategories };
-    const cats = nextExamCategories[VIEW_TYPE] || [];
-    if (!cats.some(c => c.id === CAT_ID)) {
-      nextExamCategories[VIEW_TYPE] = [...cats, { id: CAT_ID, name: "GERAL", color: "text-primary" }];
-    }
-
-    let nextExamData = { ...currentExamData };
-
-    // ATENÇÃO: Substituímos TOTALMENTE a categoria GERAL no VIEW_TYPE CDU
-    if (!nextExamData[VIEW_TYPE]) {
-      nextExamData[VIEW_TYPE] = {} as any;
-    }
-    nextExamData[VIEW_TYPE][CAT_ID] = finalGeralExams;
-
-    return { nextExamCategories, nextExamData };
-  };
-
-  const syncExamsFromValueTableWithItems = (providedItems?: ValueTableItem[]) => {
-    const valueTableItems = providedItems || [];
-    if (!providedItems) {
-      const geralValueData = (valueTableData["GERAL"] || {}) as Record<string, ValueTableItem[]>;
-      Object.values(geralValueData).forEach((items: ValueTableItem[]) => {
-        valueTableItems.push(...items);
-      });
-    }
-
-    const syncResult = calculateSyncExams(valueTableItems, examCategories, examData);
-    if (syncResult) {
-      setExamCategories(syncResult.nextExamCategories);
-      setExamData(syncResult.nextExamData);
-      setHasUnsavedChanges(true);
-    }
-    return syncResult;
-  };
-
-  // Professional functions
-  const addProfessional = (viewType: string, categoryId: string, professional: Omit<Professional, "id">) => {
-    const newProfessional: Professional = {
-      ...professional,
-      id: Date.now().toString(),
-    };
-
-    setProfessionalData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: [...(prev[viewType]?.[categoryId] || []), newProfessional],
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const updateProfessional = (viewType: string, categoryId: string, professionalId: string, updates: Partial<Omit<Professional, "id">>) => {
-    setProfessionalData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: (prev[viewType]?.[categoryId] || []).map(prof =>
-          prof.id === professionalId ? { ...prof, ...updates } : prof
-        ),
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const deleteProfessional = (viewType: string, categoryId: string, professionalId: string) => {
-    setProfessionalData(prev => ({
-      ...prev,
-      [viewType]: {
-        ...(prev[viewType] || {}),
-        [categoryId]: (prev[viewType]?.[categoryId] || []).filter(prof => prof.id !== professionalId),
-      },
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  // Header tag functions
-  const updateHeaderTag = (id: string, updates: Omit<HeaderTagInfo, "id" | "tag">) => {
-    setHeaderTagData(prev =>
-      prev.map(tag => tag.id === id ? { ...tag, ...updates } : tag)
-    );
-    setHasUnsavedChanges(true);
-  };
-
-  // Save/Load functions
-  const saveToLocalStorage = (dataOverride?: any) => {
-    const allData = {
-      scriptCategories,
-      scriptData,
-      examCategories,
-      examData,
-      contactCategories,
-      contactData,
-      valueTableCategories,
-      valueTableData,
-      professionalData,
-      officeData,
-      noticeData,
-      headerTagData,
-      examDeliveryAttendants,
-      recadoCategories,
-      recadoData,
-      infoTags,
-      infoData,
-      savedAt: new Date().toISOString(),
-      ...dataOverride // Permite sobrescrever dados que acabaram de ser atualizados
-    };
-    localStorage.setItem('portalData', JSON.stringify(allData));
-    setHasUnsavedChanges(false);
-  };
-
-  // User name functions
-  const setUserName = (name: string) => {
-    setUserNameState(name);
-    localStorage.setItem('portalUserName', name);
-  };
-
-  // Import/Export functions
-  const exportAllData = (): string => {
-    const allData = {
-      scriptCategories,
-      scriptData,
-      examCategories,
-      examData,
-      contactCategories,
-      contactData,
-      valueTableCategories,
-      valueTableData,
-      professionalData,
-      officeData,
-      noticeData,
-      headerTagData,
-      examDeliveryAttendants,
-      recadoCategories,
-      recadoData,
-      infoTags, // NOVO
-      infoData, // NOVO
-      exportDate: new Date().toISOString(),
-      version: "1.0"
-    };
-    return JSON.stringify(allData, null, 2);
-  };
-
-  const importAllData = (jsonData: string): boolean => {
+    // 5. Executar operações
     try {
-      const data = JSON.parse(jsonData);
-
-      // Validar estrutura básica
-      if (!data || typeof data !== 'object') {
-        return false;
+      // Deletar
+      if (idsToDelete.length > 0) {
+        const { error } = await supabase.from('exams').delete().in('id', idsToDelete);
+        if (error) throw error;
       }
 
-      // Importar todos os dados
-      if (data.scriptCategories) setScriptCategories(data.scriptCategories);
-      if (data.scriptData) setScriptData(data.scriptData);
-      if (data.examCategories) setExamCategories(data.examCategories);
-      if (data.examData) setExamData(data.examData);
-      if (data.contactCategories) setContactCategories(data.contactCategories);
-      if (data.contactData) setContactData(data.contactData);
-      if (data.valueTableCategories) setValueTableCategories(data.valueTableCategories);
-      if (data.valueTableData) setValueTableData(data.valueTableData);
-      if (data.professionalData) setProfessionalData(data.professionalData);
-      if (data.officeData) setOfficeData(data.officeData);
-      if (data.noticeData) setNoticeData(data.noticeData);
-      if (data.headerTagData) setHeaderTagData(data.headerTagData);
-      if (data.examDeliveryAttendants) setExamDeliveryAttendants(data.examDeliveryAttendants);
-      if (data.recadoCategories) setRecadoCategories(data.recadoCategories);
-      if (data.recadoData) setRecadoData(data.recadoData);
-      if (data.infoTags) setInfoTags(data.infoTags); // NOVO
-      if (data.infoData) setInfoData(data.infoData); // NOVO
+      // Atualizar
+      for (const { id, updates } of itemsToUpdate) {
+        await supabase.from('exams').update(updates).eq('id', id);
+      }
 
-      return true;
+      // Inserir
+      if (itemsToInsert.length > 0) {
+        const { error } = await supabase.from('exams').insert(itemsToInsert);
+        if (error) throw error;
+      }
+
+      // Garantir que a categoria GERAL exista
+      const generalCatExists = dbCategories.some(c => c.id === CAT_ID);
+      if (!generalCatExists) {
+        await createItem('categories', { id: CAT_ID, name: 'GERAL', color: 'text-primary', view_type: VIEW_TYPE });
+      }
+
+      await refetchAll();
+      toast.success(`Sincronização concluída: ${itemsToInsert.length} novos, ${itemsToUpdate.length} atualizados, ${idsToDelete.length} removidos.`);
     } catch (error) {
-      console.error("Erro ao importar dados:", error);
-      return false;
+      console.error("Erro na sincronização:", error);
+      toast.error("Erro ao sincronizar exames com a Tabela de Valores.");
     }
-  };
+  }, [dbValueTables, dbExams, dbCategories, refetchAll, createItem]);
+
+
+  // --- Context Value ---
+
+  const contextValue = useMemo(() => ({
+    loading: supabaseLoading,
+    error: supabaseError,
+    scriptCategories,
+    scriptData,
+    examCategories,
+    examData,
+    contactCategories,
+    contactData,
+    valueTableCategories,
+    valueTableData,
+    professionalData,
+    officeData,
+    noticeData,
+    headerTagData,
+    examDeliveryAttendants,
+    recadoCategories,
+    recadoData,
+    infoTags,
+    infoData,
+    tussCodes,
+    userName,
+    hasUnsavedChanges,
+    setUserName,
+    saveToLocalStorage,
+    exportAllData,
+    importAllData,
+    importTussCodes,
+    clearTussCodes,
+
+    // Mapeamento de funções CRUD para Supabase
+    updateHeaderTag,
+    addNotice, updateNotice, deleteNotice,
+    addOffice, updateOffice, deleteOffice,
+    addExamDeliveryAttendant, updateExamDeliveryAttendant, deleteExamDeliveryAttendant,
+    addProfessional, updateProfessional, deleteProfessional,
+    addScriptCategory: (viewType: string, category: Omit<Category, "id">) => addCategory('categories', viewType, category),
+    updateScriptCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => updateCategory('categories', categoryId, updates),
+    deleteScriptCategory: (viewType: string, categoryId: string) => deleteCategory('categories', categoryId),
+    addScript, updateScript, deleteScript,
+    addExamCategory: (viewType: string, category: Omit<Category, "id">) => addCategory('categories', viewType, category),
+    updateExamCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => updateCategory('categories', categoryId, updates),
+    deleteExamCategory: (viewType: string, categoryId: string) => deleteCategory('categories', categoryId),
+    addExam, updateExam, deleteExam,
+    addContactCategory: (viewType: string, category: Omit<Category, "id">) => addCategory('categories', viewType, category),
+    updateContactCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => updateCategory('categories', categoryId, updates),
+    deleteContactCategory: (viewType: string, categoryId: string) => deleteCategory('categories', categoryId),
+    addContact, updateContact, deleteContact,
+    addValueTableCategory: (viewType: string, category: Omit<Category, "id">) => addCategory('categories', viewType, category),
+    updateValueTableCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => updateCategory('categories', categoryId, updates),
+    deleteValueTableCategory: (viewType: string, categoryId: string) => deleteCategory('categories', categoryId),
+    addValueTable, updateValueTable, deleteValueTable,
+    setValueTableCategoryItems,
+    addRecadoCategory, updateRecadoCategory, deleteRecadoCategory,
+    addRecadoItem, updateRecadoItem, deleteRecadoItem,
+    addInfoTag, updateInfoTag, deleteInfoTag,
+    addInfoItem: (item: Omit<InfoItem, "id" | "date" | "tagId"> & { tagId: string }) => addInfoItem(item),
+    updateInfoItem, deleteInfoItem,
+    syncExamsFromValueTable,
+  }), [
+    supabaseLoading, supabaseError, scriptCategories, scriptData, examCategories, examData, contactCategories, contactData, valueTableCategories, valueTableData, professionalData, officeData, noticeData, headerTagData, examDeliveryAttendants, recadoCategories, recadoData, infoTags, infoData, tussCodes, userName, hasUnsavedChanges, setUserName, saveToLocalStorage, exportAllData, importAllData, importTussCodes, clearTussCodes, updateHeaderTag, addNotice, updateNotice, deleteNotice, addOffice, updateOffice, deleteOffice, addExamDeliveryAttendant, updateExamDeliveryAttendant, deleteExamDeliveryAttendant, addProfessional, updateProfessional, deleteProfessional, addScript, updateScript, deleteScript, addExam, updateExam, deleteExam, addContact, updateContact, deleteContact, addValueTable, updateValueTable, deleteValueTable, setValueTableCategoryItems, addRecadoCategory, updateRecadoCategory, deleteRecadoCategory, addRecadoItem, updateRecadoItem, deleteRecadoItem, addInfoTag, updateInfoTag, deleteInfoTag, addInfoItem, updateInfoItem, deleteInfoItem, syncExamsFromValueTable, addCategory, updateCategory, deleteCategory
+  ]);
 
   return (
-    <DataContext.Provider
-      value={{
-        scriptCategories,
-        scriptData,
-        examCategories,
-        examData,
-        contactCategories,
-        contactData,
-        valueTableCategories,
-        valueTableData,
-        professionalData,
-        officeData,
-        noticeData,
-        headerTagData,
-        examDeliveryAttendants,
-        recadoCategories,
-        recadoData,
-        infoTags, // NOVO
-        infoData, // NOVO
-        tussCodes, // Códigos TUSS
-        addScriptCategory,
-        updateScriptCategory,
-        deleteScriptCategory,
-        addScript,
-        updateScript,
-        deleteScript,
-        addExamCategory,
-        updateExamCategory,
-        deleteExamCategory,
-        addExam,
-        updateExam,
-        deleteExam,
-        addContactCategory,
-        updateContactCategory,
-        deleteContactCategory,
-        addContact,
-        updateContact,
-        deleteContact,
-        addValueTableCategory,
-        updateValueTableCategory,
-        deleteValueTableCategory,
-        addValueTable,
-        updateValueTable,
-        deleteValueTable,
-        setValueTableCategoryItems,
-        addProfessional,
-        updateProfessional,
-        deleteProfessional,
-        addOffice,
-        updateOffice,
-        deleteOffice,
-        addNotice,
-        updateNotice,
-        deleteNotice,
-        updateHeaderTag,
-        addExamDeliveryAttendant,
-        updateExamDeliveryAttendant,
-        deleteExamDeliveryAttendant,
-        addRecadoCategory,
-        updateRecadoCategory,
-        deleteRecadoCategory,
-        addRecadoItem,
-        updateRecadoItem,
-        deleteRecadoItem,
-        addInfoTag, // NOVO
-        updateInfoTag, // NOVO
-        deleteInfoTag, // NOVO
-        addInfoItem, // NOVO
-        updateInfoItem, // NOVO
-        deleteInfoItem, // NOVO
-        importTussCodes, // TUSS
-        clearTussCodes, // TUSS
-        syncExamsFromValueTable: () => syncExamsFromValueTableWithItems(),
-        exportAllData,
-        importAllData,
-        userName,
-        setUserName,
-        hasUnsavedChanges,
-        saveToLocalStorage,
-      }}
-    >
+    <DataContext.Provider value={contextValue}>
       {children}
     </DataContext.Provider>
   );

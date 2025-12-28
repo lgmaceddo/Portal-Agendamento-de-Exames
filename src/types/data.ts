@@ -2,6 +2,7 @@ export interface Category {
   id: string;
   name: string;
   color: string;
+  view_type?: string; // Adicionado para mapear a coluna view_type na tabela categories
 }
 
 export interface ScriptItem {
@@ -9,6 +10,7 @@ export interface ScriptItem {
   title: string;
   content: string;
   order?: number;
+  category_id: string; // Adicionado para mapear a FK
 }
 
 export interface SchedulingRule {
@@ -28,6 +30,7 @@ export interface ExamItem {
   extension: string;
   additionalInfo: string;
   rules?: string;
+  category_id: string; // Adicionado para mapear a FK
 }
 
 export interface TussCode {
@@ -62,6 +65,7 @@ export interface ValueTableItem {
   material_min: number;
   material_max: number;
   honorarios_diferenciados: DiferenciatedFee[];
+  category_id: string; // Adicionado para mapear a FK
 }
 
 export interface DetailedExam {
@@ -146,6 +150,7 @@ export interface RecadoItem {
   title: string;
   content: string;
   fields: string[];
+  category_id: string; // Adicionado para mapear a FK
 }
 
 // --- NOVOS TIPOS PARA INFORMAÇÕES/REGRAS ---
@@ -168,6 +173,6 @@ export interface InfoItem {
   title: string;
   content: string; // O corpo da regra/procedimento
   tagId: string;
-  date: string; // Data de criação/atualização
+  date: string; // Data de criação/atualização (mantido para exibição, mas Supabase gerencia created_at/updated_at)
   attachments: Attachment[]; // NOVO CAMPO
 }

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -33,9 +33,10 @@ import { useToast } from "@/hooks/use-toast";
 interface ScriptModalProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: ScriptFormData) => void;
+  onSave: (data: ScriptFormData) => Promise<void>;
   categories: Category[];
   editingScript?: ScriptItem & { categoryId: string };
+  isSaving: boolean;
 }
 
 export const ScriptModal = ({
@@ -44,6 +45,7 @@ export const ScriptModal = ({
   onSave,
   categories,
   editingScript,
+  isSaving,
 }: ScriptModalProps) => {
   const { toast } = useToast();
   const form = useForm<ScriptFormData>({
@@ -74,23 +76,14 @@ export const ScriptModal = ({
     }
   }, [open, editingScript, categories, form]);
 
-  const handleSubmit = (data: ScriptFormData) => {
+  const handleSubmit = async (data: ScriptFormData) => {
     try {
-      onSave(data);
-      toast({
-        title: "Sucesso!",
-        description: editingScript
-          ? "Script atualizado com sucesso."
-          : "Script criado com sucesso.",
-      });
+      await onSave(data);
       form.reset();
       onClose();
     } catch (error) {
-      toast({
-        title: "Erro",
-        description: "Ocorreu um erro ao salvar o script.",
-        variant: "destructive",
-      });
+      // Erro já tratado no Content, mas mantemos o catch para evitar crash
+      console.error(error);
     }
   };
 
@@ -120,6 +113,7 @@ export const ScriptModal = ({
                     onValueChange={field.onChange}
                     defaultValue={field.value}
                     value={field.value}
+                    disabled={isSaving}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -157,6 +151,7 @@ export const ScriptModal = ({
                         placeholder="Ex: Consulta Particular"
                         {...field}
                         maxLength={200}
+                        disabled={isSaving}
                       />
                     </FormControl>
                     <FormMessage />
@@ -182,6 +177,7 @@ export const ScriptModal = ({
                           field.onChange(value === "" ? undefined : parseInt(value));
                         }}
                         className="text-center"
+                        disabled={isSaving}
                       />
                     </FormControl>
                     <FormMessage />
@@ -203,6 +199,7 @@ export const ScriptModal = ({
                       {...field}
                       maxLength={5000}
                       className="resize-none"
+                      disabled={isSaving}
                     />
                   </FormControl>
                   <FormMessage />
@@ -214,15 +211,19 @@ export const ScriptModal = ({
             />
 
             <div className="flex justify-end space-x-4 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={handleClose}>
+              <Button type="button" variant="outline" onClick={handleClose} disabled={isSaving}>
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 className="bg-primary hover:bg-primary/90"
-                disabled={categories.length === 0}
+                disabled={categories.length === 0 || isSaving}
               >
-                {editingScript ? "Atualizar" : "Salvar"} Script
+                {isSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  editingScript ? "Atualizar" : "Salvar"
+                )} Script
               </Button>
             </div>
           </form>
