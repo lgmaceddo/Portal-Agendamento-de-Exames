@@ -532,21 +532,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
 
   // --- Funções CRUD (Supabase) ---
-  // ... (Todas as funções CRUD do Supabase permanecem aqui, mas não são repetidas para brevidade)
-  // ... (Apenas as funções de categoria são mantidas para referência de dependência)
   
   const addCategory = useCallback(async (table: 'categories' | 'info_tags' | 'recado_categories', viewType: string, category: Omit<Category, "id">) => {
-    const newCategory = await createItem(table, { ...category, view_type: viewType });
+    // Usando string literal para o nome da tabela para evitar problemas de cache de tipagem
+    const tableName = table === 'categories' ? 'categories' : table === 'info_tags' ? 'info_tags' : 'recado_categories';
+    
+    const newCategory = await createItem(tableName, { ...category, view_type: viewType });
     return newCategory;
   }, [createItem]);
 
   const updateCategory = useCallback(async (table: 'categories' | 'info_tags' | 'recado_categories', categoryId: string, updates: Partial<Category>) => {
+    const tableName = table === 'categories' ? 'categories' : table === 'info_tags' ? 'info_tags' : 'recado_categories';
     const { view_type, ...rest } = updates;
-    await updateItem(table, categoryId, rest);
+    await updateItem(tableName, categoryId, rest);
   }, [updateItem]);
 
   const deleteCategory = useCallback(async (table: 'categories' | 'info_tags' | 'recado_categories', categoryId: string) => {
-    await deleteItem(table, categoryId);
+    const tableName = table === 'categories' ? 'categories' : table === 'info_tags' ? 'info_tags' : 'recado_categories';
+    await deleteItem(tableName, categoryId);
   }, [deleteItem]);
 
   const addScript = useCallback(async (viewType: string, categoryId: string, script: Omit<ScriptItem, "id" | "category_id">) => {
@@ -872,7 +875,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     addContactCategory: (viewType: string, category: Omit<Category, "id">) => addCategory('categories', viewType, category),
     updateContactCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => updateCategory('categories', categoryId, updates),
     deleteContactCategory: (viewType: string, categoryId: string) => deleteCategory('categories', categoryId),
-    addContact, updateContact, deleteContact,
     addValueTableCategory: (viewType: string, category: Omit<Category, "id">) => addCategory('categories', viewType, category),
     updateValueTableCategory: (viewType: string, categoryId: string, updates: Partial<Category>) => updateCategory('categories', categoryId, updates),
     deleteValueTableCategory: (viewType: string, categoryId: string) => deleteCategory('categories', categoryId),

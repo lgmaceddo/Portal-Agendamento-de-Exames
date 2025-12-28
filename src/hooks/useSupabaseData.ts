@@ -205,9 +205,9 @@ interface SupabaseDataState {
   infoItems: DbInfo[];
 
   // Funções CRUD genéricas (apenas para admins)
-  createItem: (table: keyof Database['public']['Tables'], item: any) => Promise<any>;
-  updateItem: (table: keyof Database['public']['Tables'], id: string, updates: any) => Promise<any>;
-  deleteItem: (table: keyof Database['public']['Tables'], id: string) => Promise<void>;
+  createItem: (table: string, item: any) => Promise<any>;
+  updateItem: (table: string, id: string, updates: any) => Promise<any>;
+  deleteItem: (table: string, id: string) => Promise<void>;
   refetchAll: () => Promise<void>;
 }
 
@@ -232,14 +232,14 @@ export const useSupabaseData = (): SupabaseDataState => {
   const [infoTags, setInfoTags] = useState<DbInfoTag[]>([]);
   const [infoItems, setInfoItems] = useState<DbInfo[]>([]);
 
-  const fetchTable = useCallback(async (table: keyof Database['public']['Tables'], setState: (data: any) => void, selectColumns: string = '*') => {
+  const fetchTable = useCallback(async (table: string, setState: (data: any) => void, selectColumns: string = '*') => {
     const { data, error } = await supabase
       .from(table)
       .select(selectColumns);
 
     if (error) {
       console.error(`Error fetching ${table}:`, error);
-      setError(`Failed to load ${table}`);
+      // Não definimos o erro globalmente aqui para permitir que outras tabelas carreguem
       return [];
     }
     setState(data || []);
@@ -256,6 +256,7 @@ export const useSupabaseData = (): SupabaseDataState => {
     setError(null);
 
     try {
+      // Usando nomes de tabela como strings literais para maior robustez
       await Promise.all([
         fetchTable('categories', setCategories),
         fetchTable('scripts', setScripts),
@@ -286,7 +287,7 @@ export const useSupabaseData = (): SupabaseDataState => {
 
   // --- CRUD Operations (Admin Only via RLS) ---
 
-  const createItem = async (table: keyof Database['public']['Tables'], item: any) => {
+  const createItem = async (table: string, item: any) => {
     const { data, error } = await supabase
       .from(table)
       .insert(item)
@@ -302,7 +303,7 @@ export const useSupabaseData = (): SupabaseDataState => {
     return data;
   };
 
-  const updateItem = async (table: keyof Database['public']['Tables'], id: string, updates: any) => {
+  const updateItem = async (table: string, id: string, updates: any) => {
     const { data, error } = await supabase
       .from(table)
       .update(updates)
@@ -319,7 +320,7 @@ export const useSupabaseData = (): SupabaseDataState => {
     return data;
   };
 
-  const deleteItem = async (table: keyof Database['public']['Tables'], id: string) => {
+  const deleteItem = async (table: string, id: string) => {
     const { error } = await supabase
       .from(table)
       .delete()
