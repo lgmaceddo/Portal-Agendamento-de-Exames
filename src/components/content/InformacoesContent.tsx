@@ -38,6 +38,7 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
   const [editingItem, setEditingItem] = useState<InfoItem | undefined>();
   const [editingTag, setEditingTag] = useState<InfoTag | undefined>();
   const [viewingItem, setViewingItem] = useState<{ item: InfoItem, tag: InfoTag | undefined } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const {
     addInfoTag,
@@ -116,27 +117,38 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
     });
   };
 
-  const handleSaveItem = (formData: InfoItemFormData & { id?: string }) => {
-    const itemData: Omit<InfoItem, "id" | "date"> = {
-      title: formData.title,
-      content: formData.content,
-      tagId: formData.tagId,
-      attachments: formData.attachments || [],
-    };
+  const handleSaveItem = async (formData: InfoItemFormData & { id?: string }) => {
+    if (!canEditInfo) return;
+    setIsSaving(true);
+    try {
+      const itemData: Omit<InfoItem, "id" | "date" | "tagId"> & { tagId: string } = {
+        title: formData.title,
+        content: formData.content,
+        tagId: formData.tagId,
+        attachments: formData.attachments || [],
+      };
 
-    if (formData.id) {
-      const currentItem = Object.values(data).flat().find(i => i.id === formData.id);
-      if (currentItem && currentItem.tagId !== formData.tagId) {
-        deleteInfoItem(currentItem.id, currentItem.tagId);
-        addInfoItem(itemData);
+      if (formData.id) {
+        const currentItem = Object.values(data).flat().find(i => i.id === formData.id);
+        if (currentItem && currentItem.tagId !== formData.tagId) {
+          // Se mudou de tag, deleta o antigo e insere o novo (para garantir a consistência do Supabase)
+          await deleteInfoItem(currentItem.id, currentItem.tagId);
+          await addInfoItem(itemData);
+        } else {
+          await updateInfoItem({ ...currentItem!, ...itemData, id: formData.id });
+        }
+        toast({ title: "Sucesso!", description: "Informação atualizada com sucesso." });
       } else {
-        updateInfoItem({ ...currentItem!, ...itemData, id: formData.id });
+        await addInfoItem(itemData);
+        toast({ title: "Sucesso!", description: "Informação criada com sucesso." });
       }
-    } else {
-      addInfoItem(itemData);
+      setEditingItem(undefined);
+      setItemModalOpen(false);
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao salvar a informação.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
-    setEditingItem(undefined);
-    setItemModalOpen(false);
   };
 
   const handleEditItem = (item: InfoItem) => {
@@ -144,13 +156,18 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
     setItemModalOpen(true);
   };
 
-  const handleDeleteItem = (itemId: string, tagId: string) => {
+  const handleDeleteItem = async (itemId: string, tagId: string) => {
+    if (!canEditInfo) return;
     if (confirm("Tem certeza que deseja excluir esta informação?")) {
-      deleteInfoItem(itemId, tagId);
-      toast({
-        title: "Sucesso!",
-        description: "Informação excluída com sucesso.",
-      });
+      try {
+        await deleteInfoItem(itemId, tagId);
+        toast({
+          title: "Sucesso!",
+          description: "Informação excluída com sucesso.",
+        });
+      } catch (error) {
+        toast({ title: "Erro", description: "Falha ao excluir a informação.", variant: "destructive" });
+      }
     }
   };
 
@@ -160,14 +177,24 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
     setDetailsModalOpen(true);
   };
 
-  const handleSaveTag = (formData: Omit<InfoTag, "id"> | InfoTag) => {
-    if ('id' in formData) {
-      updateInfoTag(formData);
-    } else {
-      addInfoTag(formData);
+  const handleSaveTag = async (formData: Omit<InfoTag, "id"> | InfoTag) => {
+    if (!canEditInfo) return;
+    setIsSaving(true);
+    try {
+      if ('id' in formData) {
+        await updateInfoTag(formData);
+        toast({ title: "Sucesso!", description: "Etiqueta atualizada." });
+      } else {
+        await addInfoTag(formData);
+        toast({ title: "Sucesso!", description: "Etiqueta criada." });
+      }
+      setEditingTag(undefined);
+      setTagModalOpen(false);
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao salvar a etiqueta.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
-    setEditingTag(undefined);
-    setTagModalOpen(false);
   };
 
   const handleEditTag = (tag: InfoTag) => {
@@ -175,10 +202,15 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
     setTagModalOpen(true);
   };
 
-  const handleDeleteTag = (tagId: string) => {
+  const handleDeleteTag = async (tagId: string) => {
+    if (!canEditInfo) return;
     if (confirm("ATENÇÃO! Excluir esta etiqueta removerá TODOS os itens de informação associados a ela. Continuar?")) {
-      deleteInfoTag(tagId);
-      toast({ title: "Sucesso!", description: "Etiqueta e itens associados excluídos." });
+      try {
+        await deleteInfoTag(tagId);
+        toast({ title: "Sucesso!", description: "Etiqueta e itens associados excluídos." });
+      } catch (error) {
+        toast({ title: "Erro", description: "Falha ao excluir a etiqueta.", variant: "destructive" });
+      }
     }
   };
 
@@ -216,6 +248,7 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
                 toast({ title: "Dados salvos", description: "As alterações foram gravadas." });
               }}
               className={cn("h-10 w-10", hasUnsavedChanges && "bg-blue-600 hover:bg-blue-700")}
+              disabled={isSaving}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -226,6 +259,7 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
                   onClick={() => setTagModalOpen(true)}
                   variant="outline"
                   className="h-10 border-border/80"
+                  disabled={isSaving}
                 >
                   <Settings className="h-4 w-4 mr-2 text-muted-foreground" />
                   Etiquetas
@@ -236,7 +270,7 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
                     setItemModalOpen(true);
                   }}
                   className="h-10 bg-primary hover:bg-primary/90"
-                  disabled={tags.length === 0}
+                  disabled={tags.length === 0 || isSaving}
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Nova Regra
@@ -431,7 +465,7 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
                               <>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button size="icon" variant="ghost" onClick={() => handleEditItem(item)} className="h-8 w-8 text-blue-600 hover:bg-blue-50">
+                                    <Button size="icon" variant="ghost" onClick={() => handleEditItem(item)} className="h-8 w-8 text-blue-600 hover:bg-blue-50" disabled={isSaving}>
                                       <Edit className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
@@ -439,7 +473,7 @@ export const InformacoesContent = ({ tags, data }: InformacoesContentProps) => {
                                 </Tooltip>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button size="icon" variant="ghost" onClick={() => handleDeleteItem(item.id, item.tagId)} className="h-8 w-8 text-destructive hover:bg-destructive/10">
+                                    <Button size="icon" variant="ghost" onClick={() => handleDeleteItem(item.id, item.tagId)} className="h-8 w-8 text-destructive hover:bg-destructive/10" disabled={isSaving}>
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>

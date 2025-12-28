@@ -44,6 +44,7 @@ export const ProfissionaisContent = ({ data }: ProfissionaisContentProps) => {
   const [isNewProfessionalModalOpen, setIsNewProfessionalModalOpen] = useState(false);
   const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
   const [deletingProfessionalId, setDeletingProfessionalId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // State for Details Modal
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -98,36 +99,42 @@ export const ProfissionaisContent = ({ data }: ProfissionaisContentProps) => {
     setIsNewProfessionalModalOpen(true);
   };
 
-  const handleSaveProfessional = (professionalData: Omit<Professional, "id">) => {
-    if (editingProfessional) {
-      updateProfessional("GERAL", "prof-cat-1", editingProfessional.id, professionalData);
-      toast({
-        title: "Sucesso",
-        description: "Profissional atualizado com sucesso!",
-      });
-      setEditingProfessional(null);
-    } else {
-      addProfessional("GERAL", "prof-cat-1", professionalData);
-      toast({
-        title: "Sucesso",
-        description: "Profissional adicionado com sucesso!",
-      });
+  const handleSaveProfessional = async (professionalData: Omit<Professional, "id">) => {
+    if (!canEditProfissionais) return;
+    setIsSaving(true);
+    try {
+      if (editingProfessional) {
+        await updateProfessional("GERAL", "prof-cat-1", editingProfessional.id, professionalData);
+        toast({ title: "Sucesso", description: "Profissional atualizado com sucesso!" });
+        setEditingProfessional(null);
+      } else {
+        await addProfessional("GERAL", "prof-cat-1", professionalData);
+        toast({ title: "Sucesso", description: "Profissional adicionado com sucesso!" });
+      }
+      setIsNewProfessionalModalOpen(false);
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao salvar o profissional.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
-    setIsNewProfessionalModalOpen(false);
   };
 
   const handleDeleteProfessional = (professionalId: string) => {
+    if (!canEditProfissionais) return;
     setDeletingProfessionalId(professionalId);
   };
 
-  const confirmDelete = () => {
-    if (deletingProfessionalId) {
-      deleteProfessional("GERAL", "prof-cat-1", deletingProfessionalId);
-      toast({
-        title: "Sucesso",
-        description: "Profissional excluído com sucesso!",
-      });
+  const confirmDelete = async () => {
+    if (!canEditProfissionais || !deletingProfessionalId) return;
+    setIsSaving(true);
+    try {
+      await deleteProfessional("GERAL", "prof-cat-1", deletingProfessionalId);
+      toast({ title: "Sucesso", description: "Profissional excluído com sucesso!" });
       setDeletingProfessionalId(null);
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao excluir o profissional.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -175,6 +182,7 @@ export const ProfissionaisContent = ({ data }: ProfissionaisContentProps) => {
                 toast({ title: "Dados salvos", description: "As alterações foram gravadas." });
               }}
               className={cn("h-10 w-10", hasUnsavedChanges && "bg-blue-600 hover:bg-blue-700")}
+              disabled={isSaving}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -183,6 +191,7 @@ export const ProfissionaisContent = ({ data }: ProfissionaisContentProps) => {
               <Button
                 onClick={() => setIsNewProfessionalModalOpen(true)}
                 className="h-10 bg-primary hover:bg-primary/90"
+                disabled={isSaving}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Profissional
@@ -436,6 +445,7 @@ export const ProfissionaisContent = ({ data }: ProfissionaisContentProps) => {
             <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive hover:bg-destructive/90"
+              disabled={isSaving}
             >
               Excluir
             </AlertDialogAction>

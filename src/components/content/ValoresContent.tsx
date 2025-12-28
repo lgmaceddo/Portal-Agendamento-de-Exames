@@ -28,6 +28,13 @@ export const ValoresContent = ({ categories, data }: ValoresContentProps) => {
   const [generatedScript, setGeneratedScript] = useState("");
   const [editingValue, setEditingValue] = useState<ValueTableItem | undefined>();
 
+  const {
+    deleteValueTable,
+    hasUnsavedChanges,
+    saveToLocalStorage
+  } = useData();
+  const { toast } = useToast();
+
   // UseEffect para monitorar mudanças nas categorias (importante após substituição total)
   useEffect(() => {
     if (categories.length > 0) {
@@ -37,13 +44,6 @@ export const ValoresContent = ({ categories, data }: ValoresContentProps) => {
       }
     }
   }, [categories, activeCategory]);
-
-  const {
-    deleteValueTable,
-    hasUnsavedChanges,
-    saveToLocalStorage
-  } = useData();
-  const { toast } = useToast();
 
   // Garante que usamos uma categoria válida para acessar os dados
   const currentCategoryLabel = activeCategory || (categories.length > 0 ? categories[0].id : "");
@@ -78,13 +78,18 @@ export const ValoresContent = ({ categories, data }: ValoresContentProps) => {
     setIsValueModalOpen(true);
   };
 
-  const handleDelete = (item: ValueTableItem) => {
+  const handleDelete = async (item: ValueTableItem) => {
+    if (!canEditValores) return;
     if (confirm(`Deseja realmente excluir "${item.nome}"?`)) {
-      deleteValueTable("GERAL", activeCategory, item.id);
-      toast({
-        title: "Valor excluído",
-        description: "O valor foi excluído com sucesso.",
-      });
+      try {
+        await deleteValueTable("GERAL", activeCategory, item.id);
+        toast({
+          title: "Valor excluído",
+          description: "O valor foi excluído com sucesso.",
+        });
+      } catch (error) {
+        toast({ title: "Erro", description: "Falha ao excluir o valor.", variant: "destructive" });
+      }
     }
   };
 
@@ -232,7 +237,7 @@ export const ValoresContent = ({ categories, data }: ValoresContentProps) => {
                   }}
                   size="icon"
                   variant={hasUnsavedChanges ? "default" : "outline"}
-                  title={hasUnsavedChanges ? "Salvar Alterações" : "Tudo Salvo"}
+                  title={hasUnsavedChanges ? "Salvar Alterações Locais" : "Tudo Salvo"}
                   className="h-9 w-9"
                 >
                   <Save className="h-4 w-4" />

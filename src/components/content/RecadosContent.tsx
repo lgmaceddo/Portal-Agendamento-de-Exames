@@ -29,6 +29,7 @@ export const RecadosContent = ({ categories, data }: RecadosContentProps) => {
   const [editingItem, setEditingItem] = useState<(RecadoItem & { categoryId: string }) | undefined>();
   const [editingCategory, setEditingCategory] = useState<RecadoCategory | undefined>();
   const [selectedItem, setSelectedItem] = useState<{ item: RecadoItem, category: RecadoCategory } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   
   const { 
     recadoCategories,
@@ -57,15 +58,24 @@ export const RecadosContent = ({ categories, data }: RecadosContentProps) => {
   );
 
   // --- Category Handlers ---
-  const handleSaveCategory = (formData: Omit<RecadoCategory, "id"> | RecadoCategory) => {
-    if ('id' in formData) {
-      updateRecadoCategory(formData);
-      toast({ title: "Sucesso!", description: "Categoria atualizada com sucesso." });
-    } else {
-      addRecadoCategory(formData);
-      toast({ title: "Sucesso!", description: "Categoria criada com sucesso." });
+  const handleSaveCategory = async (formData: Omit<RecadoCategory, "id"> | RecadoCategory) => {
+    if (!canEditRecados) return;
+    setIsSaving(true);
+    try {
+      if ('id' in formData) {
+        await updateRecadoCategory(formData);
+        toast({ title: "Sucesso!", description: "Categoria atualizada com sucesso." });
+      } else {
+        await addRecadoCategory(formData);
+        toast({ title: "Sucesso!", description: "Categoria criada com sucesso." });
+      }
+      setEditingCategory(undefined);
+      setCategoryModalOpen(false);
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao salvar a categoria.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
-    setEditingCategory(undefined);
   };
 
   const handleEditCategory = (category: RecadoCategory) => {
@@ -73,40 +83,50 @@ export const RecadosContent = ({ categories, data }: RecadosContentProps) => {
     setCategoryModalOpen(true);
   };
 
-  const handleDeleteCategory = (categoryId: string) => {
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!canEditRecados) return;
     if (confirm("Tem certeza que deseja excluir esta categoria e todos os recados associados?")) {
-      deleteRecadoCategory(categoryId);
-      toast({ title: "Sucesso!", description: "Categoria excluída." });
+      try {
+        await deleteRecadoCategory(categoryId);
+        toast({ title: "Sucesso!", description: "Categoria excluída." });
+      } catch (error) {
+        toast({ title: "Erro", description: "Falha ao excluir a categoria.", variant: "destructive" });
+      }
     }
   };
 
   // --- Item Handlers ---
-  const handleSaveItem = (formData: RecadoItemFormData) => {
-    if (editingItem) {
-      // Se mudou de categoria, precisa remover da antiga e adicionar na nova
-      if (editingItem.categoryId !== formData.categoryId) {
-        deleteRecadoItem(editingItem.categoryId, editingItem.id);
-        addRecadoItem(formData.categoryId, {
-          title: formData.title,
-          content: formData.content,
-          fields: formData.fields,
-        });
-      } else {
-        // Mesma categoria, apenas atualiza
-        updateRecadoItem(formData.categoryId, editingItem.id, {
-          title: formData.title,
-          content: formData.content,
-          fields: formData.fields,
-        });
-      }
-    } else {
-      addRecadoItem(formData.categoryId, {
+  const handleSaveItem = async (formData: RecadoItemFormData) => {
+    if (!canEditRecados) return;
+    setIsSaving(true);
+    try {
+      const itemData = {
         title: formData.title,
         content: formData.content,
         fields: formData.fields,
-      });
+      };
+
+      if (editingItem) {
+        // Se mudou de categoria, precisa remover da antiga e adicionar na nova
+        if (editingItem.categoryId !== formData.categoryId) {
+          await deleteRecadoItem(editingItem.categoryId, editingItem.id);
+          await addRecadoItem(formData.categoryId, itemData);
+        } else {
+          // Mesma categoria, apenas atualiza
+          await updateRecadoItem(formData.categoryId, editingItem.id, itemData);
+        }
+        toast({ title: "Sucesso!", description: "Item de recado atualizado com sucesso." });
+      } else {
+        await addRecadoItem(formData.categoryId, itemData);
+        toast({ title: "Sucesso!", description: "Item de recado criado com sucesso." });
+      }
+      setEditingItem(undefined);
+      setItemModalOpen(false);
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao salvar o item de recado.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
-    setEditingItem(undefined);
   };
 
   const handleEditItem = (item: RecadoItem) => {
@@ -114,10 +134,15 @@ export const RecadosContent = ({ categories, data }: RecadosContentProps) => {
     setItemModalOpen(true);
   };
 
-  const handleDeleteItem = (itemId: string) => {
+  const handleDeleteItem = async (itemId: string) => {
+    if (!canEditRecados) return;
     if (confirm("Tem certeza que deseja excluir este item de recado?")) {
-      deleteRecadoItem(activeCategory, itemId);
-      toast({ title: "Sucesso!", description: "Item excluído com sucesso." });
+      try {
+        await deleteRecadoItem(activeCategory, itemId);
+        toast({ title: "Sucesso!", description: "Item excluído com sucesso." });
+      } catch (error) {
+        toast({ title: "Erro", description: "Falha ao excluir o item.", variant: "destructive" });
+      }
     }
   };
 
@@ -161,8 +186,9 @@ export const RecadosContent = ({ categories, data }: RecadosContentProps) => {
                 }}
                 size="icon"
                 variant={hasUnsavedChanges ? "default" : "outline"}
-                title={hasUnsavedChanges ? "Salvar Alterações" : "Tudo Salvo"}
+                title={hasUnsavedChanges ? "Salvar Alterações Locais" : "Tudo Salvo"}
                 className="h-9 w-9"
+                disabled={isSaving}
               >
                 <Save className="h-4 w-4" />
               </Button>
@@ -174,12 +200,12 @@ export const RecadosContent = ({ categories, data }: RecadosContentProps) => {
                       setEditingItem(undefined);
                       setItemModalOpen(true);
                     }}
-                    disabled={categories.length === 0}
+                    disabled={categories.length === 0 || isSaving}
                   >
                     <Plus className="h-5 w-5 mr-2" />
                     Novo Recado
                   </Button>
-                  <Button variant="outline" onClick={() => setCategoryModalOpen(true)}>
+                  <Button variant="outline" onClick={() => setCategoryModalOpen(true)} disabled={isSaving}>
                     <Settings className="h-5 w-5 mr-2" />
                     Gerenciar Categorias
                   </Button>
@@ -268,6 +294,7 @@ export const RecadosContent = ({ categories, data }: RecadosContentProps) => {
                       onClick={(e) => { e.stopPropagation(); handleEditItem(item); }}
                       className="h-8 w-8 hover:bg-background"
                       title="Editar"
+                      disabled={isSaving}
                     >
                       <Edit className="h-3.5 w-3.5" />
                     </Button>
@@ -277,6 +304,7 @@ export const RecadosContent = ({ categories, data }: RecadosContentProps) => {
                       onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }}
                       className="h-8 w-8 text-destructive hover:bg-background hover:text-destructive"
                       title="Excluir"
+                      disabled={isSaving}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
