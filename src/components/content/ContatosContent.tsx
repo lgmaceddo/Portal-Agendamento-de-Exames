@@ -25,7 +25,6 @@ export const ContatosContent = ({ viewType, categories, data }: ContatosContentP
   const [searchTerm, setSearchTerm] = useState("");
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<(ContactItem & { categoryId: string }) | undefined>();
-  const [isSaving, setIsSaving] = useState(false);
   
   const { addContact, updateContact, deleteContact, hasUnsavedChanges, saveToLocalStorage } = useData();
   const { toast } = useToast();
@@ -41,34 +40,30 @@ export const ContatosContent = ({ viewType, categories, data }: ContatosContentP
       item.ramal.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleSaveContact = async (formData: ContactFormData) => {
-    if (!canEditContatos) return;
-    setIsSaving(true);
-    try {
-      // Força o categoryId para GERAL, ignorando o valor do formulário se for diferente
-      const targetCategoryId = GENERAL_CATEGORY_ID; 
-      const contactData = {
+  const handleSaveContact = (formData: ContactFormData) => {
+    // Força o categoryId para GERAL, ignorando o valor do formulário se for diferente
+    const targetCategoryId = GENERAL_CATEGORY_ID; 
+
+    if (editingContact) {
+      updateContact(viewType, targetCategoryId, editingContact.id, {
+        setor: formData.setor,
+        local: formData.local || "",
+        ramal: formData.ramal || "",
+        telefone: formData.telefone || "",
+        whatsapp: formData.whatsapp || "",
+      });
+    } else {
+      const newContact: ContactItem = {
+        id: `c-${Date.now()}`,
         setor: formData.setor,
         local: formData.local || "",
         ramal: formData.ramal || "",
         telefone: formData.telefone || "",
         whatsapp: formData.whatsapp || "",
       };
-
-      if (editingContact) {
-        await updateContact(viewType, targetCategoryId, editingContact.id, contactData);
-        toast({ title: "Sucesso!", description: "Contato atualizado com sucesso." });
-      } else {
-        await addContact(viewType, targetCategoryId, contactData);
-        toast({ title: "Sucesso!", description: "Contato criado com sucesso." });
-      }
-      setEditingContact(undefined);
-      setContactModalOpen(false);
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha ao salvar o contato.", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
+      addContact(viewType, targetCategoryId, newContact);
     }
+    setEditingContact(undefined);
   };
 
   const handleEditContact = (contact: ContactItem) => {
@@ -77,18 +72,13 @@ export const ContatosContent = ({ viewType, categories, data }: ContatosContentP
     setContactModalOpen(true);
   };
 
-  const handleDeleteContact = async (contactId: string) => {
-    if (!canEditContatos) return;
+  const handleDeleteContact = (contactId: string) => {
     if (confirm("Tem certeza que deseja excluir este contato?")) {
-      try {
-        await deleteContact(viewType, activeCategory, contactId);
-        toast({
-          title: "Sucesso!",
-          description: "Contato excluído com sucesso.",
-        });
-      } catch (error) {
-        toast({ title: "Erro", description: "Falha ao excluir o contato.", variant: "destructive" });
-      }
+      deleteContact(viewType, activeCategory, contactId);
+      toast({
+        title: "Sucesso!",
+        description: "Contato excluído com sucesso.",
+      });
     }
   };
 
@@ -123,7 +113,7 @@ export const ContatosContent = ({ viewType, categories, data }: ContatosContentP
                 }}
                 size="icon"
                 variant={hasUnsavedChanges ? "default" : "outline"}
-                title={hasUnsavedChanges ? "Salvar Alterações Locais" : "Tudo Salvo"}
+                title={hasUnsavedChanges ? "Salvar Alterações" : "Tudo Salvo"}
                 className="h-9 w-9"
               >
                 <Save className="h-4 w-4" />
@@ -135,7 +125,6 @@ export const ContatosContent = ({ viewType, categories, data }: ContatosContentP
                     setEditingContact(undefined);
                     setContactModalOpen(true);
                   }}
-                  disabled={isSaving}
                 >
                   <Plus className="h-5 w-5 mr-2" />
                   Novo Contato

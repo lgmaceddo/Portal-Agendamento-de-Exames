@@ -33,19 +33,8 @@ export const ScriptsContent = ({ viewType, categories, data }: ScriptsContentPro
   const [editingScript, setEditingScript] = useState<(ScriptItem & { categoryId: string }) | undefined>();
   const [viewingScript, setViewingScript] = useState<ScriptItem | null>(null);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
-  const { 
-    addScript, 
-    updateScript, 
-    deleteScript, 
-    addScriptCategory, 
-    updateScriptCategory, 
-    deleteScriptCategory, 
-    userName, 
-    hasUnsavedChanges, 
-    saveToLocalStorage 
-  } = useData();
+  const { addScript, updateScript, deleteScript, addScriptCategory, updateScriptCategory, deleteScriptCategory, userName, hasUnsavedChanges, saveToLocalStorage } = useData();
   const { toast } = useToast();
 
   // Update activeCategory when viewType or categories change
@@ -72,37 +61,27 @@ export const ScriptsContent = ({ viewType, categories, data }: ScriptsContentPro
       return a.title.localeCompare(b.title, 'pt-BR');
     });
 
-  const handleSaveScript = async (formData: ScriptFormData) => {
-    if (!canEditScripts) return;
-    setIsSaving(true);
-    try {
-      const scriptData = {
-        title: formData.title,
-        content: formData.content,
-        order: formData.order,
-      };
+  const handleSaveScript = (formData: ScriptFormData) => {
+    const scriptData: ScriptItem = {
+      id: editingScript?.id || `s-${Date.now()}`,
+      title: formData.title,
+      content: formData.content,
+      order: formData.order,
+    };
 
-      if (editingScript) {
-        // Se mudou de categoria, precisa remover da antiga e adicionar na nova
-        if (editingScript.categoryId !== formData.categoryId) {
-          await deleteScript(viewType, editingScript.categoryId, editingScript.id);
-          await addScript(viewType, formData.categoryId, scriptData);
-        } else {
-          // Mesma categoria, apenas atualiza
-          await updateScript(viewType, formData.categoryId, editingScript.id, scriptData);
-        }
-        toast({ title: "Sucesso!", description: "Script atualizado com sucesso." });
+    if (editingScript) {
+      // Se mudou de categoria, precisa remover da antiga e adicionar na nova
+      if (editingScript.categoryId !== formData.categoryId) {
+        deleteScript(viewType, editingScript.categoryId, editingScript.id);
+        addScript(viewType, formData.categoryId, scriptData);
       } else {
-        await addScript(viewType, formData.categoryId, scriptData);
-        toast({ title: "Sucesso!", description: "Script criado com sucesso." });
+        // Mesma categoria, apenas atualiza
+        updateScript(viewType, formData.categoryId, editingScript.id, scriptData);
       }
-      setEditingScript(undefined);
-      setScriptModalOpen(false);
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha ao salvar o script.", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
+    } else {
+      addScript(viewType, formData.categoryId, scriptData);
     }
+    setEditingScript(undefined);
   };
 
   const handleEditScript = (script: ScriptItem) => {
@@ -110,15 +89,13 @@ export const ScriptsContent = ({ viewType, categories, data }: ScriptsContentPro
     setScriptModalOpen(true);
   };
 
-  const handleDeleteScript = async (scriptId: string) => {
-    if (!canEditScripts) return;
+  const handleDeleteScript = (scriptId: string) => {
     if (confirm("Tem certeza que deseja excluir este script?")) {
-      try {
-        await deleteScript(viewType, activeCategory, scriptId);
-        toast({ title: "Sucesso!", description: "Script excluído com sucesso." });
-      } catch (error) {
-        toast({ title: "Erro", description: "Falha ao excluir o script.", variant: "destructive" });
-      }
+      deleteScript(viewType, activeCategory, scriptId);
+      toast({
+        title: "Sucesso!",
+        description: "Script excluído com sucesso.",
+      });
     }
   };
 
@@ -138,34 +115,28 @@ export const ScriptsContent = ({ viewType, categories, data }: ScriptsContentPro
     setDetailsModalOpen(true);
   };
 
-  const handleAddCategory = async (formData: CategoryFormData) => {
-    if (!canEditScripts) return;
-    try {
-      await addScriptCategory(viewType, { name: formData.name, color: formData.color });
-      toast({ title: "Sucesso!", description: "Categoria criada com sucesso." });
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha ao criar categoria.", variant: "destructive" });
+  const handleAddCategory = (formData: CategoryFormData) => {
+    const newCategory: Category = {
+      id: `cat-${Date.now()}`,
+      name: formData.name,
+      color: formData.color,
+    };
+    addScriptCategory(viewType, newCategory);
+    if (categories.length === 0) {
+      setActiveCategory(newCategory.id);
     }
   };
 
-  const handleUpdateCategory = async (categoryId: string, updates: Partial<Category>) => {
-    if (!canEditScripts) return;
-    try {
-      await updateScriptCategory(viewType, categoryId, updates);
-      toast({ title: "Sucesso!", description: "Categoria atualizada com sucesso." });
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha ao atualizar categoria.", variant: "destructive" });
-    }
+  const handleUpdateCategory = (categoryId: string, updates: Partial<Category>) => {
+    updateScriptCategory(viewType, categoryId, updates);
   };
 
-  const handleDeleteCategory = async (categoryId: string) => {
-    if (!canEditScripts) return;
-    if (confirm("Tem certeza que deseja excluir esta categoria? Todos os scripts associados serão perdidos.")) {
-      try {
-        await deleteScriptCategory(viewType, categoryId);
-        toast({ title: "Sucesso!", description: "Categoria excluída com sucesso." });
-      } catch (error) {
-        toast({ title: "Erro", description: "Falha ao excluir categoria.", variant: "destructive" });
+  const handleDeleteCategory = (categoryId: string) => {
+    deleteScriptCategory(viewType, categoryId);
+    if (activeCategory === categoryId && categories.length > 1) {
+      const remainingCategories = categories.filter(cat => cat.id !== categoryId);
+      if (remainingCategories.length > 0) {
+        setActiveCategory(remainingCategories[0].id);
       }
     }
   };
@@ -193,18 +164,17 @@ export const ScriptsContent = ({ viewType, categories, data }: ScriptsContentPro
               </p>
             </div>
             <div className="flex items-center space-x-3">
-              {/* Botão de Salvar Local (Mantido para TUSS/Nome) */}
               <Button
                 onClick={() => {
                   saveToLocalStorage();
                   toast({
-                    title: "Dados locais salvos",
-                    description: "Nome e códigos TUSS foram salvos localmente.",
+                    title: "Dados salvos",
+                    description: "Todas as alterações foram salvas com sucesso!",
                   });
                 }}
                 size="icon"
                 variant={hasUnsavedChanges ? "default" : "outline"}
-                title={hasUnsavedChanges ? "Salvar Alterações Locais" : "Tudo Salvo"}
+                title={hasUnsavedChanges ? "Salvar Alterações" : "Tudo Salvo"}
                 className="h-9 w-9"
               >
                 <Save className="h-4 w-4" />
@@ -217,12 +187,12 @@ export const ScriptsContent = ({ viewType, categories, data }: ScriptsContentPro
                       setEditingScript(undefined);
                       setScriptModalOpen(true);
                     }}
-                    disabled={categories.length === 0 || isSaving}
+                    disabled={categories.length === 0}
                   >
                     <Plus className="h-5 w-5 mr-2" />
                     Novo Script
                   </Button>
-                  <Button variant="outline" onClick={() => setCategoryModalOpen(true)} disabled={isSaving}>
+                  <Button variant="outline" onClick={() => setCategoryModalOpen(true)}>
                     <Settings className="h-5 w-5 mr-2" />
                     Gerenciar Categorias
                   </Button>
@@ -349,7 +319,6 @@ export const ScriptsContent = ({ viewType, categories, data }: ScriptsContentPro
         onSave={handleSaveScript}
         categories={categories}
         editingScript={editingScript}
-        isSaving={isSaving}
       />
 
       {viewingScript && (

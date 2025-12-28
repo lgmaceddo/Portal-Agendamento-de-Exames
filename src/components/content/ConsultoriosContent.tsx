@@ -14,9 +14,9 @@ import { useUserRoleContext } from "@/contexts/UserRoleContext";
 
 interface ConsultoriosContentProps {
   data: Office[];
-  onAdd: (office: Omit<Office, "id">) => Promise<void>;
-  onUpdate: (office: Office) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onAdd: (office: Omit<Office, "id">) => void;
+  onUpdate: (office: Office) => void;
+  onDelete: (id: string) => void;
 }
 
 export const ConsultoriosContent = ({
@@ -33,7 +33,6 @@ export const ConsultoriosContent = ({
   const [editingOffice, setEditingOffice] = useState<Office | undefined>();
   const [activeOfficeName, setActiveOfficeName] = useState("");
   const [activeSpecialty, setActiveSpecialty] = useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
   
   const { toast } = useToast();
   const { hasUnsavedChanges, saveToLocalStorage } = useData();
@@ -65,30 +64,22 @@ export const ConsultoriosContent = ({
   // Caso contrário, exibe apenas os consultórios da aba ativa.
   const officesToDisplay = searchTerm ? filteredData : filteredData.filter((o) => o.name === activeOfficeName);
 
-  const handleSave = async (officeData: Omit<Office, "id"> & { id?: string }) => {
-    if (!canEditConsultorios) return;
-    setIsSaving(true);
-    try {
-      if (officeData.id) {
-        await onUpdate(officeData as Office);
-        toast({
-          title: "Consultório atualizado",
-          description: "As informações foram atualizadas com sucesso.",
-        });
-      } else {
-        await onAdd(officeData);
-        toast({
-          title: "Consultório criado",
-          description: "O consultório foi criado com sucesso.",
-        });
-      }
-      setEditingOffice(undefined);
-      setIsModalOpen(false);
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha ao salvar o consultório.", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
+  const handleSave = (officeData: Omit<Office, "id"> & { id?: string }) => {
+    if (officeData.id) {
+      onUpdate(officeData as Office);
+      toast({
+        title: "Consultório atualizado",
+        description: "As informações foram atualizadas com sucesso.",
+      });
+    } else {
+      onAdd(officeData);
+      toast({
+        title: "Consultório criado",
+        description: "O consultório foi criado com sucesso.",
+      });
     }
+    setEditingOffice(undefined);
+    setIsModalOpen(false);
   };
 
   const handleEdit = (office: Office) => {
@@ -96,18 +87,13 @@ export const ConsultoriosContent = ({
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!canEditConsultorios) return;
+  const handleDelete = (id: string) => {
     if (confirm("Tem certeza que deseja excluir este consultório?")) {
-      try {
-        await onDelete(id);
-        toast({
-          title: "Consultório excluído",
-          description: "O consultório foi removido com sucesso.",
-        });
-      } catch (error) {
-        toast({ title: "Erro", description: "Falha ao excluir o consultório.", variant: "destructive" });
-      }
+      onDelete(id);
+      toast({
+        title: "Consultório excluído",
+        description: "O consultório foi removido com sucesso.",
+      });
     }
   };
 
@@ -163,7 +149,6 @@ export const ConsultoriosContent = ({
                     size="icon"
                     onClick={() => handleEdit(office)}
                     className="h-8 w-8 hover:bg-primary/10"
-                    disabled={isSaving}
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -172,7 +157,6 @@ export const ConsultoriosContent = ({
                     size="icon"
                     onClick={() => handleDelete(office.id)}
                     className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                    disabled={isSaving}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -300,7 +284,6 @@ export const ConsultoriosContent = ({
               <Button 
                 onClick={handleNewOffice} 
                 className="bg-primary hover:bg-primary/90"
-                disabled={isSaving}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Item
@@ -389,7 +372,7 @@ export const ConsultoriosContent = ({
           size="lg"
         >
           <Save className="h-5 w-5 mr-2" />
-          Salvar Alterações Locais
+          Salvar Alterações
         </Button>
       )}
     </div>

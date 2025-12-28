@@ -32,8 +32,6 @@ export const ExamesContent = ({ viewType, categories, data }: ExamesContentProps
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [viewingExam, setViewingExam] = useState<ExamItem | null>(null);
   const [editingExam, setEditingExam] = useState<(ExamItem & { categoryId: string }) | undefined>();
-  const [isSaving, setIsSaving] = useState(false);
-
 
   const {
     addExam,
@@ -89,27 +87,49 @@ export const ExamesContent = ({ viewType, categories, data }: ExamesContentProps
     setDetailsModalOpen(true);
   };
 
-  const handleDelete = async (exam: ExamItem) => {
-    if (!canEditExams) return;
+  const handleDelete = (exam: ExamItem) => {
     if (confirm(`Deseja realmente excluir "${exam.title}"?`)) {
-      try {
-        await deleteExam(viewType, activeCategory, exam.id);
-        toast({
-          title: "Exame excluído",
-          description: "O exame foi removido com sucesso.",
-        });
-      } catch (error) {
-        toast({ title: "Erro", description: "Falha ao excluir o exame.", variant: "destructive" });
-      }
+      deleteExam(viewType, activeCategory, exam.id);
+      toast({
+        title: "Exame excluído",
+        description: "O exame foi removido com sucesso.",
+      });
     }
   };
 
-  const handleSaveExam = async (formData: ExamFormData) => {
-    if (!canEditExams) return;
-    setIsSaving(true);
-    try {
-      const targetViewType = formData.mainLocation;
-      const examData = {
+  const handleSaveExam = (formData: ExamFormData) => {
+    const targetViewType = viewType;
+
+    if (editingExam) {
+      if (editingExam.categoryId !== formData.categoryId) {
+        // Se mudou de categoria, deleta da antiga e adiciona na nova
+        deleteExam(viewType, editingExam.categoryId, editingExam.id);
+        const newExam: ExamItem = {
+          id: editingExam.id,
+          code: formData.code || "",
+          title: formData.title,
+          mainLocation: formData.mainLocation,
+          sectors: formData.sectors,
+          extension: formData.extension,
+          additionalInfo: formData.additionalInfo || "",
+          rules: formData.rules || "",
+        };
+        addExam(viewType, formData.categoryId, newExam);
+      } else {
+        // Apenas atualiza os dados na mesma categoria
+        updateExam(viewType, formData.categoryId, editingExam.id, {
+          code: formData.code || "",
+          title: formData.title,
+          mainLocation: formData.mainLocation,
+          sectors: formData.sectors,
+          extension: formData.extension,
+          additionalInfo: formData.additionalInfo || "",
+          rules: formData.rules || "",
+        });
+      }
+    } else {
+      const newExam: ExamItem = {
+        id: `e-${Date.now()}`,
         code: formData.code || "",
         title: formData.title,
         mainLocation: formData.mainLocation,
@@ -118,28 +138,9 @@ export const ExamesContent = ({ viewType, categories, data }: ExamesContentProps
         additionalInfo: formData.additionalInfo || "",
         rules: formData.rules || "",
       };
-
-      if (editingExam) {
-        if (editingExam.categoryId !== formData.categoryId || editingExam.mainLocation !== targetViewType) {
-          // Se mudou de categoria ou viewType, deleta da antiga e adiciona na nova
-          await deleteExam(editingExam.mainLocation, editingExam.categoryId, editingExam.id);
-          await addExam(targetViewType, formData.categoryId, examData);
-        } else {
-          // Apenas atualiza os dados na mesma categoria/viewType
-          await updateExam(targetViewType, formData.categoryId, editingExam.id, examData);
-        }
-        toast({ title: "Sucesso!", description: "Exame atualizado com sucesso." });
-      } else {
-        await addExam(targetViewType, formData.categoryId, examData);
-        toast({ title: "Sucesso!", description: "Exame criado com sucesso." });
-      }
-      setEditingExam(undefined);
-      setExamModalOpen(false);
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha ao salvar o exame.", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
+      addExam(viewType, formData.categoryId, newExam);
     }
+    setEditingExam(undefined);
   };
 
   const handleCopySingle = (exam: ExamItem) => {
@@ -168,48 +169,21 @@ export const ExamesContent = ({ viewType, categories, data }: ExamesContentProps
     });
   };
 
-  const handleAddCategory = async (formData: CategoryFormData) => {
-    if (!canEditExams) return;
-    try {
-      await addExamCategory(viewType, { name: formData.name, color: formData.color });
-      toast({ title: "Sucesso!", description: "Categoria criada com sucesso." });
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha ao criar categoria.", variant: "destructive" });
-    }
+  const handleAddCategory = (formData: CategoryFormData) => {
+    const newCategory: Category = {
+      id: `cat-${Date.now()}`,
+      name: formData.name,
+      color: formData.color,
+    };
+    addExamCategory(viewType, newCategory);
   };
 
-  const handleUpdateCategory = async (categoryId: string, updates: Partial<Category>) => {
-    if (!canEditExams) return;
-    try {
-      await updateExamCategory(viewType, categoryId, updates);
-      toast({ title: "Sucesso!", description: "Categoria atualizada com sucesso." });
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha ao atualizar categoria.", variant: "destructive" });
-    }
+  const handleUpdateCategory = (categoryId: string, updates: Partial<Category>) => {
+    updateExamCategory(viewType, categoryId, updates);
   };
 
-  const handleDeleteCategory = async (categoryId: string) => {
-    if (!canEditExams) return;
-    if (confirm("Tem certeza que deseja excluir esta categoria? Todos os exames associados serão perdidos.")) {
-      try {
-        await deleteExamCategory(viewType, categoryId);
-        toast({ title: "Sucesso!", description: "Categoria excluída com sucesso." });
-      } catch (error) {
-        toast({ title: "Erro", description: "Falha ao excluir categoria.", variant: "destructive" });
-      }
-    }
-  };
-
-  const handleSync = async () => {
-    if (!canEditExams) return;
-    setIsSaving(true);
-    try {
-      await syncExamsFromValueTable();
-    } catch (error) {
-      toast({ title: "Erro", description: "Falha na sincronização.", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
-    }
+  const handleDeleteCategory = (categoryId: string) => {
+    deleteExamCategory(viewType, categoryId);
   };
 
   return (
@@ -218,7 +192,7 @@ export const ExamesContent = ({ viewType, categories, data }: ExamesContentProps
         <div className="p-6 bg-card rounded-lg shadow">
           <div className="flex justify-between items-start mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-primary">Exames e Procedimentos</h1>
+              <h1 className="text-2xl font-bold text-primary">Exames</h1>
               <p className="text-muted-foreground mt-1">Gerencie as informações dos exames</p>
             </div>
             <div className="flex items-center space-x-3">
@@ -232,7 +206,7 @@ export const ExamesContent = ({ viewType, categories, data }: ExamesContentProps
                 }}
                 size="icon"
                 variant={hasUnsavedChanges ? "default" : "outline"}
-                title={hasUnsavedChanges ? "Salvar Alterações Locais" : "Tudo Salvo"}
+                title={hasUnsavedChanges ? "Salvar Alterações" : "Tudo Salvo"}
                 className="h-9 w-9"
               >
                 <Save className="h-4 w-4" />
@@ -241,16 +215,7 @@ export const ExamesContent = ({ viewType, categories, data }: ExamesContentProps
                 <>
                   <Button
                     variant="outline"
-                    onClick={handleSync}
-                    disabled={isSaving}
-                  >
-                    <RefreshCw className={cn("h-5 w-5 mr-2 text-teal-600", isSaving && "animate-spin")} />
-                    Sincronizar
-                  </Button>
-                  <Button
-                    variant="outline"
                     onClick={() => setCategoryModalOpen(true)}
-                    disabled={isSaving}
                   >
                     <Settings className="h-5 w-5 mr-2" />
                     Categorias
@@ -261,7 +226,6 @@ export const ExamesContent = ({ viewType, categories, data }: ExamesContentProps
                       setEditingExam(undefined);
                       setExamModalOpen(true);
                     }}
-                    disabled={categories.length === 0 || isSaving}
                   >
                     <Plus className="h-5 w-5 mr-2" />
                     Novo Exame
